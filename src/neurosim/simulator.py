@@ -49,105 +49,73 @@ class SimulationParameters:
         return self.tau_x / self.C
 
 
-class Simulator:
-
-    def __init__(self,
-                 params=None,
-                 seed=1234,
-                 crossing_times=None,
-                 mu0=None,
-                 cov0=None,
-                 u0=None):
-
-
-        np.random.seed(seed)
-
-        if params is None:
-            self.p = SimulationParameters()
-        else:
-            self.p = params
-
-
+class SimulatorBase:
+    def __init__(self, params):
+        self.p = params
         self.set_up_propagators()
-
-        if mu0 is None:
-            self.mu0 = np.array([0., 0.])
-        else:
-            self.mu0 = mu0
-
-        if cov0 is None:
-            self.cov0 = np.array([[0., 0.],
-                                  [0., 0.]]) + np.eye(2) * PSD_EPS
-        else:
-            self.cov0 = cov0
-
-        if u0 is None:
-            self.u0 = 0.
-
-        if crossing_times is None:
-            self.crossing_times = []
-            self.crossing_inds = []
-        else:
-            self.crossing_times = crossing_times
-            self.crossing_inds = [int(t/self.p.dt) for t in crossing_times]
-
-        self._step = 0
-
-        self.crossing_mu_y = []
-        self.crossing_mu_x = []
-
-        self.crossing_s_yy = []
-        self.crossing_s_xy = []
-        self.crossing_s_xx = []
-
-        self.crossing_b = []
-        self.crossing_b_dot = []
 
 
     def set_up_propagators(self):
+        eprop, covprop, covconst, uprop = self.compute_propagators(self.p.dt)
+        self.expectation_prop = eprop
+        self.cov_prop = covprop
+        self.cov_prop_const = covconst
+        self.u_prop = uprop
 
+
+    def compute_propagators(self, t):
         # Expectation propagator
         A = np.array([[-1./self.p.tau_y, 0.],
                       [1./self.p.C, -1./self.p.tau_x]])
-        self.expectation_prop = expm(A * self.p.dt)
+        expectation_prop = expm(A * t)
         
         # Covariance propagator
         B = np.array([[-2./self.p.tau_y,     0.     ,   0.   ],
                       [ 1./self.p.C    ,-1/self.p.tau_tilde,   0.   ],
                       [  0.     ,   2 / self.p.C    ,-2/self.p.tau_x]])
-        self.cov_prop = expm(B * self.p.dt)
+        cov_prop = expm(B * t)
         B_inv = np.linalg.solve(B, np.eye(3))
-        self.cov_prop_const = B_inv.dot(np.eye(3) - self.cov_prop)\
+        cov_prop_const = B_inv.dot(np.eye(3) - cov_prop)\
                 .dot(np.array([[self.p.sigma2_noise,0.,0.]]).T)
         
         # u propagator
-        self.u_prop = np.exp(-self.p.dt / self.p.tau_x)
+        u_prop = np.exp(-t / self.p.tau_x)
+        return expectation_prop, cov_prop, cov_prop_const, u_prop
+
+
+class ParticleSimulator(SimulatorBase):
+
+    def __init__(self,
+                 z_0,
+                 u_0,
+                 params):
+
+        super().__init__(params)
+
+        self.z_0 = z_0
+        self.u_0 = u_0
+        self._step = 0
 
 
     def simulate(self, t):
-        num_steps = int(t / 0.1)
-        self.s = np.zeros((num_steps,3), dtype=np.float64) # analytical solution to second cumulants
-        self.s[0] = np.array([self.cov0[0,0], self.cov0[0,1], self.cov0[1,1]])
-        self.mu = np.zeros((num_steps, 2), dtype=np.float64) # analytical solution to expectations
-        self.mu[0] = self.mu0
-
-        self.u = np.zeros(num_steps, dtype=np.float64)
-        self.u[0] = self.u0
-
-        self.b = np.zeros(num_steps, dtype=np.float64)
-        self.b[0] = self.p.threshold - self.u[0]
-
-        self.b_dot = np.zeros(num_steps, dtype=np.float64)
-#        self.b_dot[0] = self.u[0] / self.p.tau_x + 
+        print(t)
+        num_steps = int(t / self.p.dt)
         
-        self.z = np.zeros((num_steps, self.p.num_procs,  2), dtype=np.float64)
-        self.z[0] = sp.stats.multivariate_normal(self.mu0, self.cov0).rvs(self.p.num_procs)
+        self.z = np.zeros((num_steps+1, self.p.num_procs,  2), dtype=np.float64)
+        self.z[0] = self.z_0
 
-        self.upcrossings = np.zeros((num_steps, self.p.num_procs), dtype=bool)
-        self.downcrossings = np.zeros((num_steps, self.p.num_procs), dtype=bool)
+        self.upcrossings = np.zeros((num_steps+1, self.p.num_procs), dtype=bool)
+        self.downcrossings = np.zeros((num_steps+1, self.p.num_procs), dtype=bool)
 
-        for j in range(1, num_steps+1):
-            i = self._step # shorthand
+        self.u = np.zeros(num_steps+1, dtype=np.float64)
+        self.u[0] = self.u_0
+
+        self.b = np.zeros(num_steps+1, dtype=np.float64)
+        self.b[0] = self.p.threshold - self.u[0]
+        self._step += 1
+
+        for _ in range(num_steps):
+            i = self._step
             print(i, end="\r")
 
             self.propagate()        
@@ -155,47 +123,83 @@ class Simulator:
             self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i])
             self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
 
-
-            if i in self.crossing_inds:
-
-                self.crossing_mu_y.append(self.mu[i,0])
-                self.crossing_mu_x.append(self.mu[i,1])
-
-                self.crossing_s_yy.append(self.s[i,0])
-                self.crossing_s_xy.append(self.s[i,1])
-                self.crossing_s_xx.append(self.s[i,2])
-
-                self.crossing_b.append(self.b[i])
-                self.crossing_b_dot.append(self.b_dot[i])
-
-                # sample y and set x=b for all particles
-                mu_, s_ = self.compute_p_y_crossing()
-                self.z[i,:,0] = np.random.normal(loc=mu_, scale=np.sqrt(s_), size=self.p.num_procs)
-                self.z[i,:,1] = self.b[i]
-
-                # set new expectations
-                self.mu[i,0] = mu_
-                self.mu[i,1] = self.b[i]
-
-                # set new covariances
-                self.s[i,0] = s_
-                self.s[i,1] = 0.
-                self.s[i,2] = 0.
-
             self._step += 1
-
 
     def propagate(self):
         i = self._step
         self.z[i] = self.expectation_prop.dot(self.z[i-1].T).T
         self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
 
-        self.s[i] = (self.cov_prop.dot(self.s[i-1][:,None]) - self.cov_prop_const).squeeze()
-        self.mu[i] = self.expectation_prop.dot(self.mu[i-1][::,None]).squeeze()
+        self.u[i] = self.u_prop * (self.u[i-1] - self.p.E_L) + self.p.R * self.p.I_e * (1 - self.u_prop)
 
+        self.b[i] = self.p.threshold - self.u[i]
+
+class MembranePotentialSimulator(SimulatorBase):
+    def __init__(self, u_0, params):
+        super().__init__(params)
+        self._step = 0 
+        self.u_0 = u_0
+
+    def simulate(self, t):
+        num_steps = int(t / 0.1)
+
+        self.u = np.zeros(num_steps + 1, dtype=np.float64)
+        self.b = np.zeros(num_steps + 1, dtype=np.float64)
+        self.u[0] = self.u_0
+        self.b[0] = self.p.threshold - self.u_0
+        self._step += 1
+
+        for _ in range(num_steps):
+            self.propagate()
+            self._step += 1
+
+    def propagate(self):
+        i = self._step
         self.u[i] = self.u_prop * (self.u[i-1] - self.p.E_L) + self.p.R * self.p.I_e * (1 - self.u_prop)
         self.b[i] = self.p.threshold - self.u[i]
 
+    @property
+    def b_dot(self):
+        return self.u / self.p.tau_x - self.p.I_e / self.p.C
+
+
+class MomentsSimulator(SimulatorBase):
+
+    def __init__(self,
+                 mu_0,
+                 s_0,
+                 params):
+
+        super().__init__(params)
+
+
+        self.mu_0 = mu_0
+        self.s_0 = s_0
+
+        self._step = 0
+
+
+    def simulate(self, t):
+        num_steps = int(t / 0.1)
+        self.s = np.zeros((num_steps + 1, 3), dtype=np.float64) # analytical solution to second cumulants
+        self.s[0] = self.s_0
+
+        self.mu = np.zeros((num_steps + 1, 2), dtype=np.float64) # analytical solution to expectations
+        self.mu[0] = self.mu_0
+        self._step += 1
+
+        for j in range(1, num_steps+1):
+            i = self._step # shorthand
+            print(i, end="\r")
+
+            self.propagate()        
+            self._step += 1
+
+
+    def propagate(self):
+        i = self._step
+        self.s[i] = (self.cov_prop.dot(self.s[i-1][:,None]) - self.cov_prop_const).squeeze()
+        self.mu[i] = self.expectation_prop.dot(self.mu[i-1][::,None]).squeeze()
 
 
     @property
@@ -233,21 +237,178 @@ class Simulator:
         return self.mu[:,1]
 
 
-    def convert_to_mu_v(self, mu_y, mu_x):
-        return -mu_x / self.p.tau_x + mu_y / self.p.C
+
+class Simulator(SimulatorBase):
+
+    def __init__(self,
+                 params=None,
+                 crossing_times=None,
+                 mu0=None,
+                 cov0=None,
+                 u0=None,
+                 seed=1234):
+
+        np.random.seed(seed)
+
+        self.p = params
+        if crossing_times is None:
+            self.crossing_times = []
+            self.crossing_inds = []
+        else:
+            self.crossing_times = crossing_times
+            self.crossing_inds = [int(t/self.p.dt) for t in crossing_times]
+
+        self.crossing_mu_y = []
+        self.crossing_mu_x = []
+
+        self.crossing_s_yy = []
+        self.crossing_s_xy = []
+        self.crossing_s_xx = []
+
+        self.crossing_b = []
+        self.crossing_b_dot = []
+
+        self.n1s = []
+
+    def compute_n1(self, mu_0=None, s_0=None, u_0=None):
+        if not mu_0:
+            mu_0 = np.array([0., 0.])
+
+        if not s_0:
+            s_0 = np.array([0., 0., 0.])
+
+        if not u_0:
+            u_0 = 0.
+
+       
+        n1s = []
+        for t in self.crossing_times:
+            n1s.append(self.compute_prob_upcrossing(u_0, mu_0, s_0, t))
+        return n1s
+
+    def simulate_n1(self, mu_0=None, s_0=None, u_0=None):
+        if not mu_0:
+            mu_0 = np.array([0., 0.])
+
+        if not s_0:
+            s_0 = np.array([0., 0., 0.])
+
+        if not u_0:
+            u_0 = 0.
+
+        z_0 = self.sample_z(mu_0, s_0)
 
 
-    def convert_to_s_vv(self, s_yy, s_xy, s_xx):
-        return s_xx / self.p.tau_x ** 2 + s_yy / self.p.C ** 2\
-                - 2 / (self.p.tau_x * self.p.C) * s_xy
+        sim = ParticleSimulator(z_0, u_0, self.p) 
+        sim.simulate(self.crossing_times[-1])
+        n1s = []
+        for i, _ in enumerate(self.crossing_times):
+            n1s.append(sim.upcrossings[self.crossing_inds[i]].sum())
+        return n1s
+
+    def simulate_n2(self, mu_0=None, s_0=None, u_0=None):
+        if not mu_0:
+            mu_0 = np.array([0., 0.])
+
+        if not s_0:
+            s_0 = np.array([0., 0., 0.])
+
+        if not u_0:
+            u_0 = 0.
+
+        z_0 = self.sample_z(mu_0, s_0)
+        num_t = len(self.crossing_times) 
+        
+        n2s = []
+        for i in range(0, num_t-1, 1):
+            sim_i = ParticleSimulator(z_0, u_0, self.p) 
+            sim_i.simulate(self.crossing_times[i])
+            upcrossings_i = sim_i.upcrossings[-1]
+            mu_y_x, s_y_x = self.compute_p_yx(mu_0, s_0, self.crossing_times[i])
+            mu_y_b, s_y_b = self.compute_p_y_crossing(sim_i.b[-1], mu_y_x, s_y_x)
+            for j in range(i+1, num_t, 1):
+                mu_0 = np.array([mu_y_b, 0.])
+                s_0 = np.array([s_y_b, 0., 0.])
+                z_0 = self.sample_z(mu_0, s_0)
+                sim_j = ParticleSimulator(z_0, 0., self.p)
+                sim_j.simulate(self.crossing_times[j] - self.crossing_times[i])
+                n2s.append((sim_j.upcrossings[-1] & upcrossings_i).sum())
+        return n2s
 
 
-    def convert_to_s_xv(self, s_xy, s_xx):
-        return -s_xx / self.p.tau_x + s_xy / self.p.C
+    def compute_n2(self, mu_0=None, s_0=None, u_0=None):
+        if not mu_0:
+            mu_0 = np.array([0., 0.])
+
+        if not s_0:
+            s_0 = np.array([0., 0., 0.])
+
+        if not u_0:
+            u_0 = 0.
+
+        num_t = len(self.crossing_times) 
+        usim = MembranePotentialSimulator(u_0, self.p)
+        usim.simulate(self.crossing_times[-1])
+        n2s = []
+        for i in range(0, num_t-1, 1):
+            t = self.crossing_times[i]
+            t_ind = self.crossing_inds[i]
+
+            p1 = self.compute_prob_upcrossing(u_0, mu_0, s_0, t)
+            mu_y_x, s_y_x = self.compute_p_yx(mu_0, s_0, t)
+            mu_y_b, s_y_b = self.compute_p_y_crossing(usim.b[t_ind], mu_y_x, s_y_x)
+
+            mu_i = np.array([mu_y_b, 0.])
+            s_i = np.array([s_y_b, 0., 0.])
+            u_i = usim.u[t_ind]
+            
+            for j in range(i+1, num_t, 1):
+                tdiff = self.crossing_times[j] - self.crossing_times[i]
+                print("SIMTIME: ")
+                print(tdiff)
+                print(f"i = {i}, j = {j}")
+                p2 = self.compute_prob_upcrossing(u_i, mu_i, s_i, tdiff)
+                n2s.append(p1 * p2)
+        return n2s
 
 
-#     def compute_n(self):
-#         self.n = self.integral_f1_xdot() * self.pdf_b()
+    def sample_z(self, mu, s):
+        cov = np.array([[s[0], s[1]],
+                        [s[1], s[2]]])
+
+        z = sp.stats.multivariate_normal.rvs(mean=mu, cov=cov, size=self.p.num_procs)
+
+        return z
+
+    def simulate_mu_s(self, t):
+        mu_0 = np.array([0., 0.])
+        s_0 = np.array([0., 0., 0.])
+        sim = MomentsSimulator(mu_0, s_0, self.p)
+        sim.simulate(t)
+        return sim.mu, sim.s
+
+
+    def compute_prob_upcrossing(self, u_0, mu_0, s_0, t):
+        t_index = int(t / self.p.dt)
+        mu_yx_t, s_yx_t = self.compute_p_yx(mu_0, s_0, t)
+        mu_y_t = mu_yx_t[0]
+        mu_x_t = mu_yx_t[1]
+        mu_v_t = self.convert_to_mu_v(mu_y_t, mu_x_t)
+        
+        s_yy_t = s_yx_t[0]
+        s_xy_t = s_yx_t[1]
+        s_xx_t = s_yx_t[2]
+        s_xv_t = self.convert_to_s_xv(s_xy_t, s_xx_t)
+        s_vv_t = self.convert_to_s_vv(s_yy_t, s_xy_t, s_xx_t)
+
+        usim = MembranePotentialSimulator(u_0, self.p)
+        usim.simulate(t)
+        b_t = usim.b[t_index]
+        b_dot_t = usim.b_dot[t_index]
+
+        f1 = self.integral_f1_xdot(b_t, b_dot_t, mu_v_t, mu_x_t, s_vv_t, s_xv_t, s_xx_t)
+        prob_b = self.pdf_b(b_t, mu_x_t, s_xx_t)
+        return f1 * prob_b
 
 
     def compute_log_n(self):
@@ -272,26 +433,19 @@ class Simulator:
 
         return log_n
 
-    def compute_p_y_crossing(self):
-        """
-        Compute the conditional distribution p(y|x=b)
-        Returns mean and variance of distribution over y.
-        """
-        i = self._step 
-        mu_y = self.mu[i,0] + self.s[i,1] / self.s[i,2] * (self.b[i] - self.mu[i,1])  # conditional mean
-        s_y = self.s[i,0] - self.s[i,1]**2 / self.s[i,2] # conditional variance
-        return mu_y, s_y
+    def convert_to_mu_v(self, mu_y, mu_x):
+        return -mu_x / self.p.tau_x + mu_y / self.p.C
 
-#     def integral_f1_xdot(self):
-#         sigma2 = self.s_vv - self.s_xv**2 / self.s_xx
-#         sigma = np.sqrt(sigma2)
-#         mu = self.mu_v + self.s_xv / self.s_xx * (self.b - self.mu_x)
-#         t1 = sigma / np.sqrt(2*np.pi) * np.exp(-0.5*(self.b_dot-mu)**2 / sigma2)
-#         t2 = 0.5 * (self.b_dot - mu) * (1 - erf((self.b_dot-mu) / (np.sqrt(2) * sigma)))
-#         f1 = t1 - t2
-#         np.nan_to_num(f1, copy=False)
-#         return f1
-    
+
+    def convert_to_s_vv(self, s_yy, s_xy, s_xx):
+        return s_xx / self.p.tau_x ** 2 + s_yy / self.p.C ** 2\
+                - 2 / (self.p.tau_x * self.p.C) * s_xy
+
+
+    def convert_to_s_xv(self, s_xy, s_xx):
+        return -s_xx / self.p.tau_x + s_xy / self.p.C
+
+  
     def integral_f1_xdot(self, b, b_dot, mu_v, mu_x, s_vv, s_xv, s_xx):
         sigma2 = s_vv - s_xv**2 / s_xx
         sigma = np.sqrt(sigma2)
@@ -310,32 +464,35 @@ class Simulator:
     def logpdf_b(self, b, mu_x, s_xx):
         return - 0.5 * np.log(2 * np.pi * s_xx) - 0.5 * (b - mu_x) ** 2 / s_xx
 
-    def compute_p_yx(self, mu_y_0, mu_x_0, s_yy_0, s_xy_0, s_xx_0): 
+    def compute_p_yx(self, mu_0, s_0, t): 
         """Compute the joint distribution p(y,x) at time t given
         initial conditions x0, assumed to be a delta distribution,
         and y0, assumed to be Gaussian with mean mu_y0 and variance s_y0
     
         Returns mean and covariance matrix.
         """
-    
-        print(t)
-        # expectation propagator
+        mu_y_0 = mu_0[0]
+        mu_x_0 = mu_0[1]
+
+        s_yy_0 = s_0[0]
+        s_xy_0 = s_0[1]
+        s_xx_0 = s_0[2]
+
+        e_prop, cov_prop, cov_const_term, u_prop = self.compute_propagators(t)
         mu_0 = np.array([[mu_y_0, mu_x_0]]).T
-        expAt = expm(A * t)
-        mu = expAt.dot(mu_0) 
-    
+        mu = e_prop.dot(mu_0) 
     
         # 2nd moments propagator
         s_0 = np.array([[s_yy_0, s_xy_0, s_xx_0]]).T
-        expBt = expm(B * t)
-        B_inv = np.linalg.solve(B, np.eye(3))
-        b_const_term = B_inv.dot(np.eye(3) - expBt).dot(np.array([[sigma2_noise,0.,0.]]).T)
-        s = expBt.dot(s_0) - b_const_term
+        s = cov_prop.dot(s_0) - cov_const_term
         return mu.squeeze(), s.squeeze()
 
-
-
-
-
-
+    def compute_p_y_crossing(self, b, mu, s):
+        """
+        Compute the conditional distribution p(y|x=b)
+        Returns mean and variance of distribution over y.
+        """
+        mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
+        s_y = s[0] - s[1]**2 / s[2] # conditional variance
+        return mu_y, s_y
 
