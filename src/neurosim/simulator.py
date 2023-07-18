@@ -2,9 +2,6 @@ import numpy as np
 import scipy as sp
 import matplotlib.pyplot as plt
 import os
-import jax.numpy as jnp
-import jax.scipy as jsp
-import jax
 from functools import partial
 from matplotlib.gridspec import GridSpec
 from matplotlib.colors import ListedColormap
