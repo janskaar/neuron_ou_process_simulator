@@ -138,7 +138,7 @@ class MembranePotentialSimulator(SimulatorBase):
         self.u_0 = u_0
 
     def simulate(self, t):
-        num_steps = int(t / 0.1)
+        num_steps = int(t / self.p.dt)
 
         self.u = np.zeros(num_steps + 1, dtype=np.float64)
         self.b = np.zeros(num_steps + 1, dtype=np.float64)
@@ -267,7 +267,7 @@ class Simulator(SimulatorBase):
 
         self.n1s = []
 
-    def compute_n1(self, mu_0=None, s_0=None, u_0=None):
+    def compute_n1(self, mu_0=None, s_0=None, u_0=None, return_dists=False):
         if not mu_0:
             mu_0 = np.array([0., 0.])
 
@@ -279,11 +279,20 @@ class Simulator(SimulatorBase):
 
        
         n1s = []
+        mus = []
+        ss = []
         for t in self.crossing_times:
-            n1s.append(self.compute_prob_upcrossing(u_0, mu_0, s_0, t))
-        return n1s
+            mu, s, n1 = self.compute_prob_upcrossing(u_0, mu_0, s_0, t, return_dist=True)
+            n1s.append(n1)
+            mus.append(mu)
+            ss.append(s)
 
-    def simulate_n1(self, mu_0=None, s_0=None, u_0=None):
+        if return_dists:
+            return mus, ss, n1s
+        else:
+            return n1s
+
+    def simulate_n1(self, mu_0=None, s_0=None, u_0=None, return_sims=False):
         if not mu_0:
             mu_0 = np.array([0., 0.])
 
@@ -301,7 +310,11 @@ class Simulator(SimulatorBase):
         n1s = []
         for i, _ in enumerate(self.crossing_times):
             n1s.append(sim.upcrossings[self.crossing_inds[i]].sum())
-        return n1s
+
+        if return_sims:
+            return sim, n1s
+        else:
+            return n1s
 
     def simulate_n2(self, mu_0=None, s_0=None, u_0=None):
         if not mu_0:
@@ -331,7 +344,6 @@ class Simulator(SimulatorBase):
                 sim_j.simulate(self.crossing_times[j] - self.crossing_times[i])
                 n2s.append((sim_j.upcrossings[-1] & upcrossings_i).sum())
         return n2s
-
 
     def compute_n2(self, mu_0=None, s_0=None, u_0=None):
         if not mu_0:
@@ -385,7 +397,7 @@ class Simulator(SimulatorBase):
         return sim.mu, sim.s
 
 
-    def compute_prob_upcrossing(self, u_0, mu_0, s_0, t):
+    def compute_prob_upcrossing(self, u_0, mu_0, s_0, t, return_dist=False):
         t_index = int(t / self.p.dt)
         mu_yx_t, s_yx_t = self.compute_p_yx(mu_0, s_0, t)
         mu_y_t = mu_yx_t[0]
@@ -405,7 +417,11 @@ class Simulator(SimulatorBase):
 
         f1 = self.integral_f1_xdot(b_t, b_dot_t, mu_v_t, mu_x_t, s_vv_t, s_xv_t, s_xx_t)
         prob_b = self.pdf_b(b_t, mu_x_t, s_xx_t)
-        return f1 * prob_b
+
+        if return_dist:
+            return mu_yx_t, s_yx_t, f1 * prob_b
+        else:
+            return f1 * prob_b
 
 
     def compute_log_n(self):
