@@ -1,0 +1,11 @@
+#!/bin/bash
+#SBATCH --ntasks=24	        		# 1 core (CPU)
+#SBATCH --nodes=1		        	# Use 1 node
+#SBATCH --job-name=fptd              # Name of job
+#SBATCH --mem=24G
+#SBATCH --partition=dp-cn             # Use GPU partition
+#SBATCH --time=02:00:00
+
+
+srun python plot_n2_simulations.py
+
