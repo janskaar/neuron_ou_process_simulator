@@ -1,13 +1,13 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import sys, os, h5py, time
-sys.path.append("/p/project/cdeep/skaar1/Repositories/neuron_ou_process_simulator/src")
+sys.path.append("/mnt/users/janskaar/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, ParticleSimulator
 
 RANK = int(os.environ["SLURM_PROCID"])
 print(f"RANK {RANK}\n", flush=True)
 savedir = "save"
-savefile = os.path.join(savedir, "plot_n2_sims.h5")
+savefile = os.path.join(savedir, "plot_n2_upcrossings.h5")
 
 
 p = SimulationParameters(threshold=0.02, dt=0.1, I_e = 0., num_procs=100000)
@@ -24,7 +24,7 @@ if RANK == 0:
         
 z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
 
-num_per_rank = 5
+num_per_rank = 10
 start = RANK * num_per_rank + 1
 for seed in range(start, start + num_per_rank, 1):
     print(f"{seed} complete \n", flush=True)
