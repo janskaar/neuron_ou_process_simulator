@@ -5,7 +5,6 @@ sys.path.append("/mnt/users/janskaar/Repositories/neuron_ou_process_simulator/sr
 from neurosim.simulator import SimulationParameters, ParticleSimulator
 
 RANK = int(os.environ["SLURM_PROCID"])
-print(f"RANK {RANK}\n", flush=True)
 savedir = "save"
 savefile = os.path.join(savedir, "plot_n2_N1_N2.h5")
 
@@ -24,10 +23,9 @@ if RANK == 0:
         
 z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
 
-num_per_rank = 10
+num_per_rank = 20
 start = RANK * num_per_rank + 1
 for seed in range(start, start + num_per_rank, 1):
-    print(f"{seed} complete \n", flush=True)
     np.random.seed(seed)
     sim = ParticleSimulator(z_0.copy(), u_0, p) 
     sim.simulate(t)
@@ -38,10 +36,11 @@ for seed in range(start, start + num_per_rank, 1):
                 grp = f.create_group(str(seed))
                 grp.create_dataset("N1", data=sim.N1)
                 grp.create_dataset("N2", data=sim.N2)
-                print(f"SAVING {seed}\n", flush=True)
             break
         except BlockingIOError:
-            print(f"{seed} FILE LOCKED, WAITING", flush=True)
             time.sleep(0.5) 
+
+    print(f"{seed} complete", flush=True)
+
 print("COMPLETE")
 
