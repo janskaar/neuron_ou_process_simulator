@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --ntasks=16	        		# 1 core (CPU)
+#SBATCH --ntasks=1	        		# 1 core (CPU)
 #SBATCH --nodes=1		        	# Use 1 node
 #SBATCH --job-name=fptd              # Name of job
-#SBATCH --mem=20G
+#SBATCH --mem=1G
 #SBATCH --partition=smallmem             # Use GPU partition
 
 
@@ -11,5 +11,5 @@ module load Miniconda3
 source /mnt/users/janskaar/.bashrc
 conda activate nest
 
-mpirun -n 16 python plot_n2_compute.py
+srun python plot_n2_gather.py
 
