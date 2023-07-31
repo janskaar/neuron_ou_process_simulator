@@ -1,11 +1,15 @@
 #!/bin/bash
-#SBATCH --ntasks=1	        		# 1 core (CPU)
+#SBATCH --ntasks=16	        		# 1 core (CPU)
 #SBATCH --nodes=1		        	# Use 1 node
 #SBATCH --job-name=fptd              # Name of job
 #SBATCH --mem=20G
-#SBATCH --partition=dp-cn             # Use GPU partition
-#SBATCH --time=02:00:00
+#SBATCH --partition=smallmem             # Use GPU partition
 
 
-srun python plot_n2_compute.py
+module load OpenMPI/4.1.4-GCC-11.3.0
+module load Miniconda3
+source /mnt/users/janskaar/.bashrc
+conda activate nest
+
+mpirun -n 16 python plot_n2_compute.py
 
