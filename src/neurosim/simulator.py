@@ -155,7 +155,7 @@ class ParticleSimulator(SimulatorBase):
         N2(t, t') denotes the number of particles with an upcrossing at time t AND time t'
         """
         self.N1 = self.upcrossings.sum(1)
-        self.N2 = np.zeros((self.num_steps, self.num_steps), dtype=np.float64)
+        self.N2 = np.zeros((self.num_steps+1, self.num_steps+1), dtype=np.float64)
         for i in range(self.num_steps):
             for j in range(i+1, self.num_steps, 1):
                 self.N2[i,j] = float((self.upcrossings[i] & self.upcrossings[j]).sum())
