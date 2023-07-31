@@ -7,12 +7,12 @@ from neurosim.simulator import SimulationParameters, ParticleSimulator
 RANK = int(os.environ["SLURM_PROCID"])
 print(f"RANK {RANK}\n", flush=True)
 savedir = "save"
-savefile = os.path.join(savedir, "plot_n2_upcrossings.h5")
+savefile = os.path.join(savedir, "plot_n2_N1_N2.h5")
 
 
-p = SimulationParameters(threshold=0.02, dt=0.1, I_e = 0., num_procs=100000)
+p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
 
-t = 100.
+t = 10.
 
 u_0 = 0.
 mu_0 = np.zeros(2, dtype=np.float64)
@@ -31,12 +31,17 @@ for seed in range(start, start + num_per_rank, 1):
     np.random.seed(seed)
     sim = ParticleSimulator(z_0.copy(), u_0, p) 
     sim.simulate(t)
+    sim.compute_N1_N2()
     for i in range(100):
         try:
             with h5py.File(savefile, "r+") as f:
-                f.create_dataset(str(seed), data=sim.upcrossings)
-                print("SAVING {seed}\n", flush=True)
+                grp = f.create_group(str(seed))
+                grp.create_dataset("N1", data=sim.N1)
+                grp.create_dataset("N2", data=sim.N2)
+                print(f"SAVING {seed}\n", flush=True)
             break
         except BlockingIOError:
             print(f"{seed} FILE LOCKED, WAITING", flush=True)
             time.sleep(0.5) 
+print("COMPLETE")
+
