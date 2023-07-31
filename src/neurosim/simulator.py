@@ -123,6 +123,7 @@ class ParticleSimulator(SimulatorBase):
 
     def simulate(self, t):
         num_steps = int(t / self.p.dt)
+        self.num_steps = num_steps
         
         self.usim = MembranePotentialSimulator(self.u_0, self.p)
         self.usim.simulate(t)
@@ -147,6 +148,17 @@ class ParticleSimulator(SimulatorBase):
             self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
 
             self._step += 1
+
+    def compute_N1_N2(self):
+        """
+        N1(t) denotes the number of particles with an upcrossing at time t
+        N2(t, t') denotes the number of particles with an upcrossing at time t AND time t'
+        """
+        self.N1 = self.upcrossings.sum(1)
+        self.N2 = np.zeros((self.num_steps, self.num_steps), dtype=np.float64)
+        for i in range(self.num_steps):
+            for j in range(i+1, self.num_steps, 1):
+                self.N2[i,j] = float((self.upcrossings[i] & self.upcrossings[j]).sum())
 
     def propagate(self):
         i = self._step
