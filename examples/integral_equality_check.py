@@ -5,7 +5,7 @@ from scipy.stats import multivariate_normal, norm
 import sys, os, h5py
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
-from neurosim.n_functions import compute_n1, pdf_b, xy_to_xv, compute_p_y_crossing, integral_f1_xdot, compute_E_y_upcrossing_constant_b
+from neurosim.n_functions import compute_n1, pdf_b, xy_to_xv, compute_p_y_crossing, integral_f1_xdot, compute_E_y_upcrossing_constant_b, compute_E_y2_upcrossing_constant_b
 
 p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000, sigma_noise=50.)
 
@@ -34,6 +34,7 @@ n1 = compute_n1(b[0], b_dot[0], mu_xv, s_xv)
 sim_ind = 35 
 
 E_y = compute_E_y_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind])
+E_y2 = compute_E_y2_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind])
 p_b = pdf_b(0.02, mu_xv[sim_ind,1], s_xv[sim_ind,2])
 
 num_samples = 1000000
@@ -49,6 +50,13 @@ print(f"integral: {num / num_samples / p.dt}")
 print()
 print(f"E_y: {E_y / n1[sim_ind]}")
 print(f"E_y_samples: {samples[inds,0].mean()}")
+print()
+print(f"E_y2: {E_y2 / n1[sim_ind]}")
+print(f"E_y2_samples: {(samples[inds,0]**2).mean()}")
+
+
+
+
 
 mu_v_b, s_v_b = compute_p_y_crossing(b[sim_ind], mu_xv[sim_ind], s_xv[sim_ind]) 
 
@@ -64,7 +72,9 @@ pSim = ParticleSimulator(z_0,
 pSim.simulate(t)
 z_upcrossing = pSim.z[sim_ind][pSim.upcrossings[sim_ind]] 
 v_upcrossing = -z_upcrossing[:,1] / p.tau_x + z_upcrossing[:,0] / p.C
+print()
 print(f"V_upcrossing mean: {v_upcrossing.mean()}")
+print(f"V_upcrossing mean v^2: {(v_upcrossing**2).mean()}")
 
 
 # integral3 = compute_E_y_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind])
