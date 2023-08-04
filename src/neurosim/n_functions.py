@@ -15,7 +15,20 @@ def xy_to_xv(mu, s, p):
     return new_mu, new_s
 
 
-def integral_f1_xdot(b, b_dot, mu_v, mu_x, s_vv, s_xv, s_xx):
+def integral_f1_xdot(b, b_dot, mu, s):
+    if len(mu.shape) == 1:
+        mu = mu[None,:]
+
+    if len(s.shape) == 1:
+        s = s[None,:]
+
+    mu_v = mu[:,0]
+    mu_x = mu[:,1]
+    
+    s_vv = s[:,0]
+    s_xv = s[:,1]
+    s_xx = s[:,2]
+
     sigma2 = s_vv - s_xv**2 / s_xx
     sigma = np.sqrt(sigma2)
     mu = mu_v + s_xv / s_xx * (b - mu_x)
@@ -45,7 +58,13 @@ def compute_n1(b, b_dot, mu_xv, s_xv):
             s_xv[:,2] is Var(X)
     """
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv[:,0], mu_xv[:,1], s_xv[:,0], s_xv[:,1], s_xv[:,2])
+    if len(mu_xv.shape) == 1:
+        mu_xv = mu_xv[None,:]
+
+    if len(s_xv.shape) == 1:
+        s_xv = s_xv[None,:]
+
+    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
@@ -64,7 +83,7 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
             s_xv[:,2] is Var(X)
     """
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv[:,0], mu_xv[:,1], s_xv[:,0], s_xv[:,1], s_xv[:,2])
+    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
@@ -76,4 +95,25 @@ def compute_p_y_crossing(b, mu, s):
     mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
     s_y = s[0] - s[1]**2 / s[2] # conditional variance
     return mu_y, s_y
+
+
+def compute_E_y_upcrossing_constant_b(b, s_xv):
+    """
+    Computes the expectation of v=x_dot, given that it it will have
+    an upcrossing at the current time interval.
+    """
+    if len(s_xv.shape) == 1:
+        s_xv = s_xv[None,:]
+
+    prefactor = np.exp(- b ** 2 / (2 * s_xv[:,2])) / (4 * np.pi * s_xv[:,2] ** 2.5)
+    s_tilde_sq = s_xv[:,2] * (s_xv[:,2] * s_xv[:,0] - s_xv[:,1] ** 2) 
+    s_tilde = np.sqrt(s_tilde_sq)
+
+    t1 = 2 * b * s_xv[:,1] * s_tilde * np.exp(-b ** 2 * s_xv[:,1] ** 2 / (2 * s_tilde_sq))
+    t2 = np.sqrt(2 * np.pi) * ((b ** 2 - s_xv[:,2]) * s_xv[:,1] ** 2 + s_xv[:,2] ** 2 * s_xv[:,0] ) * (1 + erf(b * s_xv[:,1] / (np.sqrt(2) * s_tilde)))
+
+#     print(t1)
+#     print(t2)
+#     print(s_tilde_sq)
+    return prefactor * (t1 + t2)
 
