@@ -145,7 +145,7 @@ class ParticleSimulator(SimulatorBase):
             self.propagate()        
 
             self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i])
-            self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
+            self.downcrossings[i] = (self.z[i,:,1] <= self.b[i]) & (self.z[i-1,:,1] > self.b[i])
 
             self._step += 1
 
