@@ -14,6 +14,21 @@ def xy_to_xv(mu, s, p):
     new_s[:,1] = -s[:,2] / p.tau_x + s[:,1] / p.C
     return new_mu, new_s
 
+def f1_schwalger(b, b_dot, mu_xy, s_xy, p):
+    det = s_xy[:,0] * s_xy[:,2] - s_xy[:,1] ** 2
+
+    B_1 = (s_xy[:,2] / p.tau_x ** 2 - 2 * s_xy[:,1] / p.tau_x + s_xy[:,0]) * b  ** 2
+    B_2 = 2 * (s_xy[:,2] / p.tau_x - s_xy[:,1]) * b * b_dot
+    B_3 = s_xy[:,2] * b_dot ** 2
+
+    B = (B_1 + B_2 + B_3) / (2 * det)
+
+    H_arg = ((s_xy[:,2] / p.tau_x - s_xy[:,1]) * b + s_xy[:,2] * b_dot) / np.sqrt(2 * det * s_xy[:,2])
+
+    H = 1 - np.sqrt(np.pi) * H_arg * np.exp(H_arg ** 2) * erfc(H_arg)
+    f = np.sqrt(det) / (2 * np.pi * s_xy[:,2]) * H * np.exp(-B)
+    np.nan_to_num(f, copy=False)
+    return f
 
 def integral_f1_xdot(b, b_dot, mu, s):
     if len(mu.shape) == 1:
@@ -87,14 +102,14 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
-# def compute_p_y_crossing(b, mu, s):
-#     """
-#     Compute the conditional distribution p(y|x=b)
-#     Returns mean and variance of distribution over y.
-#     """
-#     mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
-#     s_y = s[0] - s[1]**2 / s[2] # conditional variance
-#     return mu_y, s_y
+def compute_p_y_crossing(b, mu, s):
+    """
+    Compute the conditional distribution p(y|x=b)
+    Returns mean and variance of distribution over y.
+    """
+    mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
+    s_y = s[0] - s[1]**2 / s[2] # conditional variance
+    return mu_y, s_y
 
 def compute_p_y_upcrossing_constant_b(b, s_xv, n1):
     mu = compute_E_y_upcrossing_constant_b(b, s_xv, n1)
