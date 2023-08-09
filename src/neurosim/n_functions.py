@@ -103,41 +103,6 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
-def compute_p_y_crossing(b, mu, s):
-    """
-    Compute the conditional distribution p(y|x=b)
-    Returns mean and variance of distribution over y.
-    """
-    mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
-    s_y = s[0] - s[1]**2 / s[2] # conditional variance
-    return mu_y, s_y
-
-def compute_p_y_upcrossing_constant_b(b, s_xv, n1):
-    mu = compute_E_y_upcrossing_constant_b(b, s_xv, n1)
-    s = compute_E_y2_upcrossing_constant_b(b, s_xv, n1)
-    
-    return mu, s - mu ** 2
-
-
-def compute_E_y_upcrossing_constant_b(b, s_xv, n1):
-    """
-    Computes the expectation of v=x_dot, given that it it will have
-    an upcrossing at the current time interval.
-    """
-    if len(s_xv.shape) == 1:
-        s_xv = s_xv[None,:]
-
-    prefactor = np.exp(- b ** 2 / (2 * s_xv[:,2])) / (4 * np.pi * s_xv[:,2] ** 2.5 * n1)
-    s_tilde_sq = s_xv[:,2] * (s_xv[:,2] * s_xv[:,0] - s_xv[:,1] ** 2) 
-    s_tilde = np.sqrt(s_tilde_sq)
-
-    t1 = 2 * b * s_xv[:,1] * s_tilde * np.exp(-b ** 2 * s_xv[:,1] ** 2 / (2 * s_tilde_sq))
-    t2 = np.sqrt(2 * np.pi) * ((b ** 2 - s_xv[:,2]) * s_xv[:,1] ** 2 + s_xv[:,2] ** 2 * s_xv[:,0] ) * (1 + erf(b * s_xv[:,1] / (np.sqrt(2) * s_tilde)))
-
-#     print(t1)
-#     print(t2)
-#     print(s_tilde_sq)
-    return prefactor * (t1 + t2)
 
 def compute_E_y2_upcrossing_constant_b(b, s_xv, n1):
     """
