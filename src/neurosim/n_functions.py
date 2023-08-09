@@ -113,11 +113,6 @@ def compute_p_y_upcrossing(b, b_dot, mu_xv, s_xv, n1, num=51):
     s_v_x = s_xv[0] - s_xv[1] ** 2 / s_xv[2]
     p_b = norm.pdf(b, loc=mu_xv[0], scale=s_xv[2] ** 0.5)
 
-    print("XXXXXXXXXXXXXXXXXXXX")
-    print(f"MU = {mu_v_x}")
-    print(f"S = {s_v_x}")
-    print("XXXXXXXXXXXXXXXXXXXX")
-
     vs = np.linspace(b_dot, mu_v_x + 5 * s_v_x ** 0.5, num)
     E_v = np.trapz(norm.pdf(vs, loc=mu_v_x, scale = s_v_x ** 0.5) * vs ** 2, x=vs) * p_b / n1
     E_v2 = np.trapz(norm.pdf(vs, loc=mu_v_x, scale = s_v_x ** 0.5) * vs ** 3, x=vs) * p_b / n1
