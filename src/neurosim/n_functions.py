@@ -105,7 +105,7 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
 
 
 
-def compute_E_v_v2_upcrossing_numerical(b, b_dot, mu_xv, s_xv, n1, num=51):
+def compute_p_y_upcrossing(b, b_dot, mu_xv, s_xv, n1, num=51):
     #
     # ASSUMES ONLY A SINGLE TIME STEP, NOT ENTIRE TIME SERIES
     #

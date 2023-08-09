@@ -5,11 +5,11 @@ from scipy.stats import multivariate_normal
 import sys, os, h5py
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
-from neurosim.n_functions import compute_n1, pdf_b, xy_to_xv, integral_f1_xdot, compute_p_y_upcrossing_constant_b, compute_E_v_v2_upcrossing_numerical
+from neurosim.n_functions import compute_n1, pdf_b, xy_to_xv, integral_f1_xdot, compute_p_y_upcrossing
 
-p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
+p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=500000)
 
-t = 5.
+t = 3.
 num_steps = int(t / p.dt)
 
 u_0 = 0.
@@ -38,19 +38,17 @@ pSim = ParticleSimulator(z0,
 
 pSim.simulate(t)
 
-time_ind = 440
+time_ind = 300
 inds = pSim.upcrossings[time_ind]
 
-mu_upcrossing, s_upcrossing = compute_p_y_upcrossing_constant_b(0.02, s_xv[time_ind], n1[time_ind])
-mu_numerical, s_numerical = compute_E_v_v2_upcrossing_numerical(0.02, 0., [0., 0.], s_xv[time_ind], n1[time_ind])
+mu_numerical, s_numerical = compute_p_y_upcrossing(0.02, 0., [0., 0.], s_xv[time_ind], n1[time_ind])
 
 z_upcrossing = pSim.z[time_ind][pSim.upcrossings[time_ind]] 
 v_upcrossing = -z_upcrossing[:,1] / p.tau_x + z_upcrossing[:,0] / p.C
 
-print(f"Expected mean upcrossing: {mu_upcrossing.squeeze()}")
 print(f"Sample mean upcrossing: {v_upcrossing.mean()}")
+print(f"Numerical integration mean upcrossing: {mu_numerical}")
 
-print(f"Expected var upcrossing: {s_upcrossing.squeeze()}")
 print(f"Sample var upcrossing: {v_upcrossing.var()}")
-
+print(f"Numerical integration var upcrossing: {s_numerical - mu_numerical ** 2}")
 
