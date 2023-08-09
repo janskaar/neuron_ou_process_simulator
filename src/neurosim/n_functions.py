@@ -104,36 +104,6 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
     return f1 * prob_b
 
 
-def compute_E_y2_upcrossing_constant_b(b, s_xv, n1):
-    """
-    Computes the expectation of v=x_dot, given that it it will have
-    an upcrossing at the current time interval.
-    """
-    if len(s_xv.shape) == 1:
-        s_xv = s_xv[None,:]
-
-
-    det = s_xv[:,2] * s_xv[:,0] - s_xv[:,1] ** 2 # determinant of covariance matrix of p(v, x)
-    sigma_v_x = np.sqrt(s_xv[:,0] - s_xv[:,1] ** 2 / s_xv[:,2]) # std of p(v|x)
-    s_tilde_sq = s_xv[:,2] * det # common term, helper variable
-    s_tilde = np.sqrt(s_tilde_sq) # common term, helper variable
-
-    prefactor = np.exp(- b ** 2 / (2 * s_xv[:,2])) / (4 * np.pi * s_xv[:,2] ** 2.5 * s_tilde * n1)
-
-    t1 = b ** 3 * np.sqrt(2 * np.pi) * s_xv[:,1] ** 3 * sigma_v_x
-
-    t2 = np.exp(-(b * s_xv[:,1]) ** 2 / (2 * s_tilde_sq)) * (2 * b ** 2 * s_xv[:,1] ** 2 * det + 4 * s_tilde_sq ** 2 / s_xv[:,2])
-
-    t3 = 3 * b * np.sqrt(2 * np.pi) * s_tilde * (s_xv[:,0] * s_xv[:,1] * s_xv[:,2] - s_xv[:,1] ** 3)
-
-    t4 = b * np.sqrt(2 * np.pi) * s_xv[:,1] * sigma_v_x * ((b  * s_xv[:,1]) ** 2 + 3 * s_tilde_sq) * erf((b * s_xv[:,1]) / (np.sqrt(2) * s_tilde))
-
-
-#     print(t1)
-#     print(t2)
-#     print(s_tilde_sq)
-    return prefactor * (t1 + t2 + t3 + t4)
-
 
 def compute_E_v_v2_upcrossing_numerical(b, b_dot, mu_xv, s_xv, n1, num=51):
     #
