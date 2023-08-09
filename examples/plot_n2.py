@@ -5,11 +5,11 @@ from scipy.stats import multivariate_normal
 import sys, os, h5py
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
-from neurosim.n_functions import compute_n1, pdf_b, xy_to_xv, compute_p_y_crossing, integral_f1_xdot
+from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot, compute_p_v_upcrossing
 
 p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
 
-t = 5.
+t = 6.
 num_steps = int(t / p.dt)
 
 u_0 = 0.
@@ -22,21 +22,37 @@ u = uSim.u
 b = uSim.b
 b_dot = uSim.b_dot
 
-sim = MomentsSimulator(mu_0, s_0, p)
-sim.simulate(t)
-mu_n1 = sim.mu
-s_n1 = sim.s
+sim1 = MomentsSimulator(mu_0, s_0, p)
+sim1.simulate(t)
+mu_xy1 = sim1.mu
+s_xy1 = sim1.s
+mu_xv1, s_xv1 = xy_to_xv(mu_xy1, s_xy1, p)
 
-mu_xv, s_xv = xy_to_xv(mu_n1, s_n1, p)
 
-n1 = compute_n1(b[0], b_dot[0], mu_xv, s_xv)
+n1 = compute_n1(b[0], b_dot[0], mu_xv1, s_xv1)
+
+
+z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+psim1 = ParticleSimulator(z_0, 0., p)
+psim1.simulate(t)
+
+
 n1s = np.zeros((num_steps+1, num_steps+1), dtype=np.float64)
 mu_ys = []
 s_ys = []
+mu_vs = []
+s_vs = []
 for i in range(1, num_steps):
-    mu_y, s_y = compute_p_y_crossing(b[i], mu_n1[i], s_n1[i])
+    mu_v, s_v = compute_p_v_upcrossing(b[i], b_dot[i], mu_xv1[i], s_xv1[i], n1[i])
+    
+    mu_y, s_y = xv_to_xy(np.array([mu_v, b[i]]), np.array([s_v, 0., 0.]), p)
+    mu_y = mu_y[0]
+    s_y = s_y[0]
+
     mu_ys.append(mu_y)
     s_ys.append(s_y)
+    mu_vs.append(mu_v)
+    s_vs.append(s_v)
     mu = np.array([mu_y, b[i]])
     s = np.array([s_y, 0., 0.])
     sim = MomentsSimulator(mu, s, p)
@@ -51,9 +67,10 @@ sim_ind = 300
 mu = np.array([mu_ys[sim_ind], b[sim_ind]])
 s = np.array([s_ys[sim_ind], 0., 0.])
 
-sim = MomentsSimulator(mu, s, p)
-sim.simulate(10. - sim_ind * p.dt)
-mu_xv, s_xv = xy_to_xv(sim.mu, sim.s, p)
+sim2 = MomentsSimulator(mu, s, p)
+sim2.simulate(t - sim_ind * p.dt)
+mu_xv, s_xv = xy_to_xv(sim2.mu, sim2.s, p)
+mu_xy, s_xy = xv_to_xy(mu_xv, s_xv, p)
 # n1 conditioned on spiking at step i
 n1_c = compute_n1(b[i], b_dot[i], mu_xv, s_xv)
 
@@ -64,13 +81,18 @@ pSim = ParticleSimulator(z0,
                          u[sim_ind],
                          p)
 
+
 pSim.simulate(t - sim_ind * p.dt)
 pSim.compute_N1_N2()
 
+
 n2s = n1s * n1[None,:]
 
-R = 2 * n1s / n1[None,:] - 1
-R = np.nan_to_num(R, nan=-1.)
+
+with np.errstate(invalid="ignore", divide="ignore"):
+    R = 2 * n1s / n1[None,:] - 1
+    R = np.nan_to_num(R, nan=-1.)
+
 integrand = n1s - n1[None,:]
 integrand[np.tril_indices(integrand.shape[0])] = 0.
 
@@ -87,23 +109,18 @@ ys_t_minus_1 = np.load(os.path.join("save", "ys_t_minus_1.npy"))
 xs_crossing = np.load(os.path.join("save", "xs_crossing.npy"))
 ys_crossing = np.load(os.path.join("save", "ys_crossing.npy"))
 
-mu, s = compute_p_y_crossing(b[sim_ind], mu_n1[sim_ind], s_n1[sim_ind])
+# mu, s = compute_p_y_upcrossing(b[sim_ind], b_dot[sim_ind], mu_n1[sim_ind], s_n1[sim_ind], n1[sim_ind])
 
-integral_f1_xdot(b[sim_ind], b_dot[sim_ind], mu_n1[sim_ind,0
+# integral_f1_xdot(b[sim_ind], b_dot[sim_ind], mu_n1[sim_ind,0
 
-z1 = np.stack((ys_t_minus_1[:], xs_t_minus_1[:]), axis=1)
-p1 = SimulationParameters(threshold=0.02, dt=0.001, I_e = 0., num_procs=len(z1))
-
-sim1 = ParticleSimulator(z1,
-                         u[sim_ind],
-                         p1)
-
-sim1.simulate(0.01)
-
-crossings = sim1.upcrossings | sim1.downcrossings
-
-
-
+# z1 = np.stack((ys_t_minus_1[:], xs_t_minus_1[:]), axis=1)
+# p1 = SimulationParameters(threshold=0.02, dt=0.001, I_e = 0., num_procs=len(z1))
+# 
+# sim1 = ParticleSimulator(z1,
+#                          u[sim_ind],
+#                          p1)
+# 
+# sim1.simulate(0.01)
 
 
 # z1 = np.stack((ys, xs), axis=1)
