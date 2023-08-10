@@ -90,14 +90,15 @@ class ParticleSimulator(SimulatorBase):
     def __init__(self,
                  z_0,
                  u_0,
-                 params):
+                 params,
+                 fix_x_threshold=False):
 
         super().__init__(params)
 
         self.z_0 = z_0
         self.u_0 = u_0
         self._step = 0
-
+        self.fix_x_threshold = fix_x_threshold
 
     def set_up_propagators(self):
         eprop, covprop, covconst = self.compute_propagators()
@@ -136,7 +137,6 @@ class ParticleSimulator(SimulatorBase):
 
         self.upcrossings = np.zeros((num_steps+1, self.p.num_procs), dtype=bool)
         self.downcrossings = np.zeros((num_steps+1, self.p.num_procs), dtype=bool)
-
         self._step += 1
 
         for _ in range(num_steps):
@@ -146,6 +146,10 @@ class ParticleSimulator(SimulatorBase):
 
             self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i])
             self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
+            
+
+            if self.fix_x_threshold:
+                self.z[...,1][i,self.upcrossings[i]] = self.b[i]
 
             self._step += 1
 
