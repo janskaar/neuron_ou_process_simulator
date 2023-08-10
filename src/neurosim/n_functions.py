@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.special import erf, erfc
 from scipy.linalg import expm
+from scipy.stats import norm
 
 
 def xy_to_xv(mu, s, p):
@@ -14,8 +15,36 @@ def xy_to_xv(mu, s, p):
     new_s[:,1] = -s[:,2] / p.tau_x + s[:,1] / p.C
     return new_mu, new_s
 
+def f1_schwalger(b, b_dot, mu_xy, s_xy, p):
+    det = s_xy[:,0] * s_xy[:,2] - s_xy[:,1] ** 2
 
-def integral_f1_xdot(b, b_dot, mu_v, mu_x, s_vv, s_xv, s_xx):
+    B_1 = (s_xy[:,2] / p.tau_x ** 2 - 2 * s_xy[:,1] / p.tau_x + s_xy[:,0]) * b  ** 2
+    B_2 = 2 * (s_xy[:,2] / p.tau_x - s_xy[:,1]) * b * b_dot
+    B_3 = s_xy[:,2] * b_dot ** 2
+
+    B = (B_1 + B_2 + B_3) / (2 * det)
+
+    H_arg = ((s_xy[:,2] / p.tau_x - s_xy[:,1]) * b + s_xy[:,2] * b_dot) / np.sqrt(2 * det * s_xy[:,2])
+
+    H = 1 - np.sqrt(np.pi) * H_arg * np.exp(H_arg ** 2) * erfc(H_arg)
+    f = np.sqrt(det) / (2 * np.pi * s_xy[:,2]) * H * np.exp(-B)
+    np.nan_to_num(f, copy=False)
+    return f
+
+def integral_f1_xdot(b, b_dot, mu, s):
+    if len(mu.shape) == 1:
+        mu = mu[None,:]
+
+    if len(s.shape) == 1:
+        s = s[None,:]
+
+    mu_v = mu[:,0]
+    mu_x = mu[:,1]
+    
+    s_vv = s[:,0]
+    s_xv = s[:,1]
+    s_xx = s[:,2]
+
     sigma2 = s_vv - s_xv**2 / s_xx
     sigma = np.sqrt(sigma2)
     mu = mu_v + s_xv / s_xx * (b - mu_x)
@@ -45,7 +74,13 @@ def compute_n1(b, b_dot, mu_xv, s_xv):
             s_xv[:,2] is Var(X)
     """
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv[:,0], mu_xv[:,1], s_xv[:,0], s_xv[:,1], s_xv[:,2])
+    if len(mu_xv.shape) == 1:
+        mu_xv = mu_xv[None,:]
+
+    if len(s_xv.shape) == 1:
+        s_xv = s_xv[None,:]
+
+    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
@@ -64,16 +99,23 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
             s_xv[:,2] is Var(X)
     """
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv[:,0], mu_xv[:,1], s_xv[:,0], s_xv[:,1], s_xv[:,2])
+    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
-def compute_p_y_crossing(b, mu, s):
-    """
-    Compute the conditional distribution p(y|x=b)
-    Returns mean and variance of distribution over y.
-    """
-    mu_y = mu[0] + s[1] / s[2] * (b - mu[1])  # conditional mean
-    s_y = s[0] - s[1]**2 / s[2] # conditional variance
-    return mu_y, s_y
+
+
+def compute_p_y_upcrossing(b, b_dot, mu_xv, s_xv, n1, num=51):
+    #
+    # ASSUMES ONLY A SINGLE TIME STEP, NOT ENTIRE TIME SERIES
+    #
+    mu_v_x = mu_xv[0] + s_xv[1] / s_xv[2] * (b - mu_xv[1])
+    s_v_x = s_xv[0] - s_xv[1] ** 2 / s_xv[2]
+    p_b = norm.pdf(b, loc=mu_xv[0], scale=s_xv[2] ** 0.5)
+
+    vs = np.linspace(b_dot, mu_v_x + 5 * s_v_x ** 0.5, num)
+    E_v = np.trapz(norm.pdf(vs, loc=mu_v_x, scale = s_v_x ** 0.5) * vs ** 2, x=vs) * p_b / n1
+    E_v2 = np.trapz(norm.pdf(vs, loc=mu_v_x, scale = s_v_x ** 0.5) * vs ** 3, x=vs) * p_b / n1
+
+    return E_v, E_v2
 
