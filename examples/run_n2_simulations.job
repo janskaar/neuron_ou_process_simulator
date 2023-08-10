@@ -1,0 +1,12 @@
+#!/bin/bash
+#SBATCH --ntasks=16	        		# 1 core (CPU)
+#SBATCH --nodes=1		        	# Use 1 node
+#SBATCH --job-name=fptd              # Name of job
+#SBATCH --mem=30G
+#SBATCH --partition=smallmem             # Use GPU partition
+
+module load Miniconda3
+source /mnt/users/janskaar/.bashrc
+conda activate nest
+
+srun python plot_n2_simulations.py
