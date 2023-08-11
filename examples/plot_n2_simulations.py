@@ -5,7 +5,7 @@ sys.path.append("/mnt/users/janskaar/Repositories/neuron_ou_process_simulator/sr
 from neurosim.simulator import SimulationParameters, ParticleSimulator
 
 RANK = int(os.environ["SLURM_PROCID"])
-savedir = "save"
+savedir = "save_fix_x"
 savefile = os.path.join(savedir, "plot_n2_N1_N2.h5")
 
 p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
@@ -27,7 +27,7 @@ num_per_rank = 100
 start = RANK * num_per_rank + 1
 for seed in range(start, start + num_per_rank, 1):
     np.random.seed(seed)
-    sim = ParticleSimulator(z_0.copy(), 0., p) 
+    sim = ParticleSimulator(z_0.copy(), 0., p, fix_x_threshold=True) 
     sim.simulate(t)
     sim.compute_N1_N2()
 
