@@ -240,6 +240,7 @@ class MomentsSimulator(SimulatorBase):
         B = np.array([[-2./self.p.tau_y,     0.     ,   0.   ],
                       [ 1./self.p.C    ,-1/self.p.tau_tilde,   0.   ],
                       [  0.     ,   2 / self.p.C    ,-2/self.p.tau_x]])
+
         cov_prop = expm(B * t)
         B_inv = np.linalg.solve(B, np.eye(3))
         cov_prop_const = B_inv.dot(np.eye(3) - cov_prop)\
@@ -247,7 +248,6 @@ class MomentsSimulator(SimulatorBase):
         
         # u propagator
         return expectation_prop, cov_prop, cov_prop_const
-
 
 
     def simulate(self, t):
