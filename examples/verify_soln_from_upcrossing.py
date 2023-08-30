@@ -7,9 +7,8 @@ import sys, os, h5py
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
 from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot, compute_mu_var_v_upcrossing
-from neurosim.n_functions import ou_soln_upcrossing_v_delta_x, compute_p_v_upcrossing, conditional_bivariate_gaussian
-from neurosim.n_functions import compute_cov_t_upcrossing_v_delta_x
-from neurosim.n_functions import compute_mu_terms_t_upcrossing_v_delta_x
+from neurosim.n_functions import ou_soln_v_upcrossing_v_delta_x, compute_p_v_upcrossing, conditional_bivariate_gaussian
+from neurosim.n_functions import ou_soln_x_upcrossing_v_delta_x
 
 p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=100000)
 
@@ -112,6 +111,7 @@ ax[1].plot(s_xy1[:,0], '--')
 plt.show()
 
 vs = np.linspace(-0.1, 0.1, 1001)
+xs = np.linspace(-0.1, 0.1, 1001)
 
 mu_0, s_0 = conditional_bivariate_gaussian(p.threshold, mu_xv1[sim_ind], s_xv1[sim_ind])
 f_0 = f1[sim_ind]
@@ -120,15 +120,31 @@ b_0 = b[sim_ind]
 
 # f1, e1, e2, t1, t2 = ou_soln_upcrossing_v_delta_x(vs, mu_0, s_0, f_0, b_0, b_dot_0, 0.01, p)
 
+t_plot = 0.1
+ind_plot = int(t_plot / p.dt)
 
-ou_soln = ou_soln_upcrossing_v_delta_x(vs, mu_0, s_0, f_0, b_0, b_dot_0, 0.01, p)
+ou_soln_v = ou_soln_v_upcrossing_v_delta_x(vs, mu_0, s_0, f_0, b_0, b_dot_0, t_plot, p)
+ou_soln_x = ou_soln_x_upcrossing_v_delta_x(xs, mu_0, s_0, f_0, b_0, b_dot_0, t_plot, p)
 
-plt.plot(vs, ou_soln)
-_, ymax = plt.ylim()
-plt.ylim(0, ymax)
-plt.twinx()
-plt.hist(xv2[1,:,0], density=True, bins=vs, histtype="step", color="C1")
+
+fig, ax = plt.subplots(2)
+
+ax[0].plot(vs, ou_soln_v)
+_, ymax = ax[0].get_ylim()
+ax[0].set_ylim(0, ymax)
+twax = ax[0].twinx()
+twax.hist(xv2[ind_plot,:,0], density=True, bins=vs, histtype="step", color="C1")
+
+
+
+ax[1].plot(xs, ou_soln_x)
+_, ymax = ax[1].get_ylim()
+ax[1].set_ylim(0, ymax)
+twax = ax[1].twinx()
+twax.hist(xv2[ind_plot,:,1], density=True, bins=vs, histtype="step", color="C1")
+
 plt.show()
+
 
 # plt.hist(vs_crossing, bins=1001, density=True)
 # plt.plot(v, p_v[0])

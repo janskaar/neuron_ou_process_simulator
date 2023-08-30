@@ -310,7 +310,9 @@ def var_v_delta_init(t, p):
 def compute_v_alpha(t, p):
     return np.exp(-t / p.tau_y)
 
-def compute_mu_terms_t_upcrossing_v_delta_x(t, p):
+
+
+def compute_mu_terms_v_t_upcrossing_v_delta_x(t, p):
     delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
 
     v_term = np.exp(-t / p.tau_y)\
@@ -320,17 +322,9 @@ def compute_mu_terms_t_upcrossing_v_delta_x(t, p):
 
     return v_term, x_term
 
-def compute_mu_terms_t_upcrossing_y_delta_x(t, p):
-    delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
-
-    y_term = (p.tau_x * p.tau_y) / (p.C * (p.tau_x - p.tau_y)) * delta_e
-
-    x_term = np.exp(-t / p.tau_x)
-
-    return y_term, x_term
 
 
-def compute_cov_t_upcrossing_v_delta_x(t, p):
+def compute_cov_v_t_upcrossing_v_delta_x(t, p):
     # Covariance propagator
     B = np.array([[-2./p.tau_y,     0.     ,   0.   ],
                   [ 1./p.C    ,-1/p.tau_tilde,   0.   ],
@@ -345,32 +339,10 @@ def compute_cov_t_upcrossing_v_delta_x(t, p):
     return var_v
 
 
-# @ignore_numpy_warnings
-# def ou_soln_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
-#     s_t = compute_cov_t_upcrossing_v_delta_x(t, p)
-#     v_term, x_term = compute_mu_terms_t_upcrossing_v_delta_x(t, p)
-# 
-#     alpha = v_term
-#     alpha_sq = alpha ** 2
-#     prefactor = 1 / (2 * np.pi * s_0 * f_0 * s_t)
-#     f1 = np.exp(-0.5 * ((v + x_term * b_0) - mu_0 * alpha) ** 2 / (s_t + alpha_sq * s_0)) 
-# 
-# #    arg_sq = (mu_0 * s_t + (v + x_term * b_0) * alpha * s_0 - b_dot_0 * (s_t + alpha_sq * s_0)) ** 2 / (2 * s_0 * s_t * (s_t + alpha_sq * s_0))   
-#     arg = (mu_0 * s_t + (v + x_term * b_0) * alpha * s_0 - b_dot_0 * (s_t + alpha_sq * s_0)) / np.sqrt(2 * s_0 * s_t * (s_t + alpha_sq * s_0))
-#     arg_sq = arg ** 2
-# 
-# 
-#     t1 = (s_t * s_0) / (s_t + alpha_sq * s_0) * np.exp(-arg_sq)
-#     t2 = np.pi ** 0.5 / (s_t + alpha_sq * s_0) * arg * erfc(-arg)
-#     return prefactor, f1, t1, t2, arg, alpha
-#     return prefactor * f1 * (t1 + t2)
-
-
-
 @ignore_numpy_warnings
-def ou_soln_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
-    s_t = compute_cov_t_upcrossing_v_delta_x(t, p)
-    v_term, x_term = compute_mu_terms_t_upcrossing_v_delta_x(t, p)
+def ou_soln_v_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
+    s_t = compute_cov_v_t_upcrossing_v_delta_x(t, p)
+    v_term, x_term = compute_mu_terms_v_t_upcrossing_v_delta_x(t, p)
 
     alpha = v_term
     beta = b_0 * x_term
@@ -403,5 +375,66 @@ def ou_soln_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
     return f1 * e1 * (t1 + t2)
 
 
+
+
+def compute_cov_x_t_upcrossing_v_delta_x(t, p):
+    # Covariance propagator
+    B = np.array([[-2./p.tau_y,     0.     ,   0.   ],
+                  [ 1./p.C    ,-1/p.tau_tilde,   0.   ],
+                  [  0.     ,   2 / p.C    ,-2/p.tau_x]])
+
+    cov_prop = expm(B * t)
+    B_inv = np.linalg.solve(B, np.eye(3))
+    cov = -B_inv.dot(np.eye(3) - cov_prop)\
+            .dot(np.array([[p.sigma2_noise,0.,0.]]).T).squeeze()
+    
+    return cov[2]
+
+
+def compute_mu_terms_x_t_upcrossing_v_delta_x(t, p):
+    delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
+
+    v_term = (p.tau_x * p.tau_y * delta_e) / (p.tau_x - p.tau_y)
+           
+
+    x_term = (p.tau_y * delta_e) / (p.tau_x - p.tau_y) + np.exp(-t / p.tau_x)
+
+    return v_term, x_term
+
+
+@ignore_numpy_warnings
+def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
+    s_t = compute_cov_x_t_upcrossing_v_delta_x(t, p)
+    v_term, x_term = compute_mu_terms_x_t_upcrossing_v_delta_x(t, p)
+
+    alpha = v_term
+    beta = -b_0 * x_term
+
+    arg1 = (mu_0 ** 2 * s_t\
+         + (v + beta) ** 2 * s_0\
+         + b_dot_0 ** 2 * (s_t + alpha ** 2 * s_0)\
+         - 2 * b_dot_0 * (mu_0 * s_t + alpha * (v + beta) * s_0)\
+         ) / (2 * s_t * s_0)
+          
+    arg2 = (mu_0 * s_t\
+         + alpha * (v + beta) * s_0\
+         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
+         ) ** 2  / (2 * s_t * s_0 * (s_t + alpha ** 2 * s_0))
+
+    arg3 = (mu_0 * s_t\
+         + alpha * (v + beta) * s_0\
+         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
+         ) / (2 ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0)
+
+    f1 = (np.pi ** 0.5) / (2 ** 0.5 * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * (s_t + alpha ** 2 * s_0) * f_0 * np.sqrt(s_t))
+
+    e1 = np.exp(-arg1 + arg2)
+    e2 = np.exp(-arg2)
+
+    t1 = (2 / np.pi) ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0 * e2
+    t2 = (mu_0 * s_t + alpha * (v + beta) * s_0 - b_dot_0 * (s_t + alpha ** 2 * s_0)) * (1 + erf(arg3))
+    
+
+    return f1 * e1 * (t1 + t2)
 
 
