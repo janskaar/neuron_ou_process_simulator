@@ -17,7 +17,7 @@ from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral
 
 p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
 
-t = 10.
+t = 20.
 num_steps = int(t / p.dt)
 
 def compute_expectation(m0, p, t):
