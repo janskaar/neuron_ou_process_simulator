@@ -374,9 +374,6 @@ def ou_soln_v_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
 
     return f1 * e1 * (t1 + t2)
 
-
-
-
 def compute_cov_x_t_upcrossing_v_delta_x(t, p):
     # Covariance propagator
     B = np.array([[-2./p.tau_y,     0.     ,   0.   ],
@@ -390,17 +387,14 @@ def compute_cov_x_t_upcrossing_v_delta_x(t, p):
     
     return cov[2]
 
-
 def compute_mu_terms_x_t_upcrossing_v_delta_x(t, p):
     delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
 
     v_term = (p.tau_x * p.tau_y * delta_e) / (p.tau_x - p.tau_y)
            
-
     x_term = (p.tau_y * delta_e) / (p.tau_x - p.tau_y) + np.exp(-t / p.tau_x)
 
     return v_term, x_term
-
 
 @ignore_numpy_warnings
 def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
@@ -434,7 +428,32 @@ def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
     t1 = (2 / np.pi) ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0 * e2
     t2 = (mu_0 * s_t + alpha * (v + beta) * s_0 - b_dot_0 * (s_t + alpha ** 2 * s_0)) * (1 + erf(arg3))
     
-
     return f1 * e1 * (t1 + t2)
+
+def ou_soln_upcrossing_alpha_beta(t, p):
+    exp_tau_x = np.exp(-t / p.tau_x)
+    exp_tau_y = np.exp(-t / p.tau_y)
+    delta_e = exp_tau_x - exp_tau_y
+    denom1 = (1. / p.tau_y - 1. / p.tau_x)
+    denom2 = denom1 * p.tau_x
+    denom3 = denom2 * p.tau_x
+
+    alpha1 = exp_tau_y - delta_e / denom2
+    alpha2 = delta_e / denom1
+
+    beta1 = -delta_e * (1 / p.tau_x + 1 / denom3)
+    beta2 = exp_tau_x + delta_e / denom2
+
+    return np.array([alpha1, alpha2]), np.array([beta1, beta2])
+
+def ou_soln_xv_upcrossing_v_delta_x(x, v, mu_0, s_0, b_0, b_dot_0, alpha, beta, S, t, p):
+    mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
+    det_S_sqrt = np.sqrt(S[0,0] * S[1,1] - S[1,0] ** 2)
+    quad_alpha = alpha.T.dot(S).dot(alpha.T)
+
+
+    f1 = 1. / np.sqrt(2 * np.pi * s_0[2]) * np.exp(-0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2])
+    f2 = 1. / (np.sqrt(2 * np.pi * s_v_x) * 2 * np.pi * det_S_sqrt * quad_alpha)
+
 
 
