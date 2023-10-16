@@ -6,8 +6,9 @@ import jax.numpy as jnp
 from jax import config
 config.update("jax_enable_x64", True)
 from scipy.integrate import cumtrapz
-from scipy.stats import multivariate_normal
+from scipy.stats import multivariate_normal, norm
 from scipy.linalg import expm
+from scipy.special import erfc
 import sys, os
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
@@ -17,7 +18,6 @@ from neurosim.n_functions import ou_soln_x_upcrossing_v_delta_x
 from neurosim.n_functions import ou_soln_xv_upcrossing_v_delta_x
 from neurosim.n_functions import ou_soln_xv_integrand
 from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
-
 
 
 # u_0 = 0.
@@ -218,9 +218,81 @@ from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossi
 ## ====================
 # Verify soln after upcrossing
 
+# # simulate expectation / covariance for first upcrossing
+# t1_sim = 10.
+# p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=10000)
+# mu_0 = np.zeros(2, dtype=np.float64)
+# s_0 = np.zeros(3, dtype=np.float64)
+# msim = MomentsSimulator(mu_0, s_0, p)
+# msim.simulate(t1_sim)
+# mu_xy = msim.mu
+# s_xy = msim.s
+# mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
+# upcrossing_ind = 900
+# 
+# # compute p(v) at upcrossing
+# v_vec = np.linspace(0., 0.1, 1001)
+# p_v = compute_p_v_upcrossing(v_vec, p.threshold, 0., mu_xv[upcrossing_ind], s_xv[upcrossing_ind]).squeeze()
+# p_v_integral = np.trapz(p_v, x=v_vec)
+# print(f"p(v) INTEGRAL: {p_v_integral}")
+# p_v /= p_v_integral
+# 
+# # simulate with initial conditions of upcrossing
+# t = 10.
+# t_vec = np.arange(0, t+p.dt, p.dt)
+# z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+# v_0 = np.random.choice(v_vec, p=p_v * (v_vec[1] - v_vec[0]), size=p.num_procs, replace=True)
+# y_0 = (v_0 + p.threshold / p.tau_x) * p.C
+# z_0[:,0] = y_0
+# z_0[:,1] = p.threshold
+# sim = ParticleSimulator(z_0, 0., p)
+# sim.simulate(t)
+# xv = np.zeros_like(sim.z)
+# xv[...,1] = sim.z[...,1]
+# xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
+# 
+# 
+# soln_fn = jax.vmap(ou_soln_xv_upcrossing_v_delta_x, in_axes=(0, None, None, None, None, None, None))
+# #soln_fn = jax.vmap(soln_fn, in_axes=(None, None, None, None, None, 0, None))
+# 
+# 
+# plot_ind = 10
+# 
+# zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+# 
+# v_vec = np.linspace(zmin, zmax, 101)
+# x_vec = np.linspace(xmin, xmax, 101)
+# vv, xx = np.meshgrid(v_vec, x_vec)
+# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+# 
+# 
+# f = soln_fn(z_arr,
+#             mu_xy[upcrossing_ind],
+#             s_xv[upcrossing_ind],
+#             p.threshold,
+#             0.,
+#             t_vec[plot_ind],
+#             p)
+# 
+# 
+# f = f.reshape((101, 101))
+# fig = plt.figure()
+# ax = fig.add_subplot(1,1,1)
+# ax.scatter(xv[plot_ind,:,0], xv[plot_ind,:,1], s=1.)
+# ax.contour(vv, xx, f)
+# plt.show()
+
+
+
+## ====================
+# Verify second upcrossing probability
+
 # simulate expectation / covariance for first upcrossing
+
+
 t1_sim = 10.
-p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=10000)
+p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=100000)
 mu_0 = np.zeros(2, dtype=np.float64)
 s_0 = np.zeros(3, dtype=np.float64)
 msim = MomentsSimulator(mu_0, s_0, p)
@@ -238,7 +310,7 @@ print(f"p(v) INTEGRAL: {p_v_integral}")
 p_v /= p_v_integral
 
 # simulate with initial conditions of upcrossing
-t = 10.
+t = 1.
 t_vec = np.arange(0, t+p.dt, p.dt)
 z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
 v_0 = np.random.choice(v_vec, p=p_v * (v_vec[1] - v_vec[0]), size=p.num_procs, replace=True)
@@ -251,21 +323,43 @@ xv = np.zeros_like(sim.z)
 xv[...,1] = sim.z[...,1]
 xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
 
-
 soln_fn = jax.vmap(ou_soln_xv_upcrossing_v_delta_x, in_axes=(0, None, None, None, None, None, None))
-#soln_fn = jax.vmap(soln_fn, in_axes=(None, None, None, None, None, 0, None))
 
 plot_ind = 10
 
-zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
-xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
 
-v_vec = np.linspace(zmin, zmax, 101)
-x_vec = np.linspace(xmin, xmax, 101)
-vv, xx = np.meshgrid(v_vec, x_vec)
-z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+# zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+# xmean = xv[plot_ind,:,1].mean()
+# 
+# 
+# v_vec = np.linspace(zmin, zmax, 1001)
+# x_vec = np.array([xmin, p.threshold, xmean])
+# vv, xx = np.meshgrid(v_vec, x_vec, indexing="ij")
+# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+# 
+# 
+# f = soln_fn(z_arr,
+#             mu_xy[upcrossing_ind],
+#             s_xv[upcrossing_ind],
+#             p.threshold,
+#             0.,
+#             t_vec[plot_ind],
+#             p)
+# 
+# 
+# f = f.reshape((len(v_vec), len(x_vec)))
+# fig = plt.figure()
+# ax = fig.add_subplot(1,1,1)
+# ax.scatter(xv[plot_ind,:,0], xv[plot_ind,:,1], s=1.)
+# ax.contour(vv, xx, f)
+# plt.show()
 
-#(z, mu_0, s_0, b_0, b_dot_0, t, p):
+
+
+v_vec = np.linspace(-0.025, 0.025, 1001)
+z_arr = np.stack((v_vec, np.zeros_like(v_vec)+p.threshold), axis=-1)
+
 f = soln_fn(z_arr,
             mu_xy[upcrossing_ind],
             s_xv[upcrossing_ind],
@@ -274,17 +368,30 @@ f = soln_fn(z_arr,
             t_vec[plot_ind],
             p)
 
-f = f.reshape((101, 101))
-fig = plt.figure()
-ax = fig.add_subplot(1,1,1)
-ax.scatter(xv[plot_ind,:,0], xv[plot_ind,:,1], s=1.)
-ax.contour(vv, xx, f)
-#ax.contour(vv, xx, f_integrand)
+
+
+f = np.array(f)
+f[np.isnan(f)] = 0.
+f = f / np.trapz(f, x=v_vec)
+
+e = np.trapz(f * v_vec, x=v_vec)
+s = np.trapz(f * (v_vec - e) ** 2, x=v_vec)
+g = norm.pdf(v_vec, loc=e, scale=s**0.5)
+
+inds = (xv[plot_ind,:,1] < 0.01005) & (xv[plot_ind,:,1] >= 0.00995)
+
+
+
+plt.plot(v_vec, f)
+plt.plot(v_vec, g)
+plt.hist(xv[plot_ind,inds,0], density=True, bins=100)
 plt.show()
 
 
 
+
 ## ====================
+
 # sim_ind = 300
 # 
 # 
