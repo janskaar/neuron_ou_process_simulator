@@ -8,7 +8,7 @@ config.update("jax_enable_x64", True)
 from scipy.integrate import cumtrapz
 from scipy.stats import multivariate_normal, norm
 from scipy.linalg import expm
-from scipy.special import erfc
+from scipy.special import erfc, erf
 import sys, os
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
@@ -18,6 +18,9 @@ from neurosim.n_functions import ou_soln_x_upcrossing_v_delta_x
 from neurosim.n_functions import ou_soln_xv_upcrossing_v_delta_x
 from neurosim.n_functions import ou_soln_xv_integrand
 from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
+
+phi = np.arctan(1080 / 1920)
+sz = (14 * np.cos(phi), 14 * np.sin(phi))
 
 
 # u_0 = 0.
@@ -325,19 +328,121 @@ xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
 
 soln_fn = jax.vmap(ou_soln_xv_upcrossing_v_delta_x, in_axes=(0, None, None, None, None, None, None))
 
-plot_ind = 10
+plot_ind = 2
 
+zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+xmean = xv[plot_ind,:,1].mean()
 
-# zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
-# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
-# xmean = xv[plot_ind,:,1].mean()
-# 
-# 
-# v_vec = np.linspace(zmin, zmax, 1001)
+v_vec = np.linspace(-0.0015, 0.01, 1001)
 # x_vec = np.array([xmin, p.threshold, xmean])
-# vv, xx = np.meshgrid(v_vec, x_vec, indexing="ij")
-# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
-# 
+x_vec = np.linspace(xmin, xmax, 1001)
+vv, xx = np.meshgrid(v_vec, x_vec, indexing="ij")
+z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+
+arg_f1, f1, t2, arg, f = soln_fn(z_arr,
+            mu_xy[upcrossing_ind],
+            s_xv[upcrossing_ind],
+            p.threshold,
+            0.,
+            t_vec[plot_ind],
+            p)
+
+f = f.reshape((len(v_vec), len(x_vec)))
+arg_f1 = arg_f1.reshape((len(v_vec), len(x_vec)))
+f1 = f1.reshape((len(v_vec), len(x_vec)))
+t2 = t2.reshape((len(v_vec), len(x_vec)))
+arg = arg.reshape((len(v_vec), len(x_vec)))
+
+for i in range(0,100, 10):
+    fig = plt.figure()
+    fig.set_size_inches(sz)
+    a = f[:,i]
+    nan_a = np.asarray(a).copy()
+    nan_a[np.isnan(nan_a)] = 0
+    a_norm = nan_a / np.trapz(nan_a, x=v_vec)
+
+    norm1_arg = arg_f1[:,i]
+    norm1 = f1[:,i]
+
+    q = np.asarray(arg[:,i])
+    norm2 = -np.pi ** 0.5 * q * np.exp(q ** 2 + norm1_arg) * erfc(q)
+    norm3 = -np.pi ** 0.5 * np.exp(q ** 2 + norm1_arg)
+
+    dx = v_vec[1] - v_vec[0]
+
+    e = np.sum(a_norm * v_vec) * dx
+    s = np.sum(a_norm * (v_vec - e ) ** 2) * dx
+    n = norm.pdf(v_vec, loc=e, scale=s ** 0.5)
+
+    exp_prod = np.exp(arg_f1[:,i] + arg[:,i] ** 2)
+    exp_prod[np.isnan(exp_prod)] = 0
+
+    plt.plot(v_vec, a, c="royalblue", label="Final dist.")
+    plt.plot(v_vec, norm1, c="orange", label="Dist. from $\dot{b}_1$")
+    plt.plot(v_vec, norm2, c="red", label="Correction")
+    plt.legend()
+
+#     plt.figure()
+#     qvec = np.linspace(-15, 15, 1001)
+#     xvec = np.linspace(-250, 10, 1001)
+#     qq, xx = np.meshgrid(qvec, xvec, indexing="ij")
+#     grid = np.stack((qq, xx), axis=-1).reshape((-1, 2))
+#     
+#     vals = []
+#     for (q_, x_) in grid:
+#         vals.append(func2(q_, x_))
+#     vals = np.array(vals).reshape((len(qvec), len(xvec)))
+#     
+#     plt.pcolormesh(qq, xx, vals, vmin=-1, vmax=1)
+#     plt.scatter(q, norm1_arg, s=1.)
+#     plt.xlim(qvec[0], qvec[-1])
+#     plt.ylim(xvec[0], xvec[-1])
+
+    plt.show()
+
+# a = np.linspace(-20, 20, 1001)
+# plt.plot(a, a * erfc(a))
+# plt.show()
+
+def func1(quad):
+    return np.exp(quad)
+
+def func2(q, quad):
+    return -q * np.exp(q ** 2 + quad) * np.pi ** 0.5 * erfc(q)
+ 
+qvec = np.linspace(-15, 15, 1001)
+xvec = np.linspace(-250, 10, 1001)
+qq, xx = np.meshgrid(qvec, xvec, indexing="ij")
+grid = np.stack((qq, xx), axis=-1).reshape((-1, 2))
+
+vals = []
+for (q_, x_) in grid:
+    vals.append(func2(q_, x_))
+vals = np.array(vals).reshape((len(qvec), len(xvec)))
+
+plt.pcolormesh(qq, xx, vals, vmin=-1, vmax=1)
+for i in range(0, 200, 20):
+    norm1_arg = arg_f1[:,i]
+    q = np.asarray(arg[:,i])
+    plt.scatter(q, norm1_arg, s=1.)
+plt.xlim(qvec[0], qvec[-1])
+plt.ylim(xvec[0], xvec[-1])
+plt.show()
+
+
+
+
+## 
+
+# fig = plt.figure()
+# ax = fig.add_subplot(1,1,1)
+# ax.scatter(xv[plot_ind,:,0], xv[plot_ind,:,1], s=1.)
+# ax.contour(vv, xx, f)
+# plt.show()
+
+# v_vec = np.linspace(-0.025, 0.025, 1001)
+# z_arr = np.stack((v_vec, np.zeros_like(v_vec)+p.threshold), axis=-1)
 # 
 # f = soln_fn(z_arr,
 #             mu_xy[upcrossing_ind],
@@ -347,48 +452,20 @@ plot_ind = 10
 #             t_vec[plot_ind],
 #             p)
 # 
+# f = np.array(f)
+# f[np.isnan(f)] = 0.
+# f = f / np.trapz(f, x=v_vec)
 # 
-# f = f.reshape((len(v_vec), len(x_vec)))
-# fig = plt.figure()
-# ax = fig.add_subplot(1,1,1)
-# ax.scatter(xv[plot_ind,:,0], xv[plot_ind,:,1], s=1.)
-# ax.contour(vv, xx, f)
+# e = np.trapz(f * v_vec, x=v_vec)
+# s = np.trapz(f * (v_vec - e) ** 2, x=v_vec)
+# g = norm.pdf(v_vec, loc=e, scale=s**0.5)
+# 
+# inds = (xv[plot_ind,:,1] < 0.01005) & (xv[plot_ind,:,1] >= 0.00995)
+# 
+# plt.plot(v_vec, f)
+# plt.plot(v_vec, g)
+# # plt.hist(xv[plot_ind,inds,0], density=True, bins=100)
 # plt.show()
-
-
-
-v_vec = np.linspace(-0.025, 0.025, 1001)
-z_arr = np.stack((v_vec, np.zeros_like(v_vec)+p.threshold), axis=-1)
-
-f = soln_fn(z_arr,
-            mu_xy[upcrossing_ind],
-            s_xv[upcrossing_ind],
-            p.threshold,
-            0.,
-            t_vec[plot_ind],
-            p)
-
-
-
-f = np.array(f)
-f[np.isnan(f)] = 0.
-f = f / np.trapz(f, x=v_vec)
-
-e = np.trapz(f * v_vec, x=v_vec)
-s = np.trapz(f * (v_vec - e) ** 2, x=v_vec)
-g = norm.pdf(v_vec, loc=e, scale=s**0.5)
-
-inds = (xv[plot_ind,:,1] < 0.01005) & (xv[plot_ind,:,1] >= 0.00995)
-
-
-
-plt.plot(v_vec, f)
-plt.plot(v_vec, g)
-plt.hist(xv[plot_ind,inds,0], density=True, bins=100)
-plt.show()
-
-
-
 
 ## ====================
 
