@@ -12,10 +12,10 @@ from scipy.special import erfc, erf
 import sys, os
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
-from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot, compute_mu_var_v_upcrossing
-from neurosim.n_functions import ou_soln_v_upcrossing_v_delta_x, compute_p_v_upcrossing, conditional_bivariate_gaussian
+from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot
+from neurosim.n_functions import ou_soln_v_upcrossing_v_delta_x, compute_p_v_upcrossing, conditional_bivariate_gaussian, gaussian_pdf
 from neurosim.n_functions import ou_soln_x_upcrossing_v_delta_x
-from neurosim.n_functions import ou_soln_xv_upcrossing_v_delta_x
+from neurosim.n_functions import ou_soln_xv_after_upcrossing
 from neurosim.n_functions import ou_soln_xv_integrand
 from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
 
@@ -61,8 +61,7 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # i = sim.upcrossings.sum(1).argmax()
 # z = sim.z[i,sim.upcrossings[i]]
 # v = -z[:,1] / p.tau_x + z[:,0] / p.C
-# v_vec = np.linspace(v.min(), v.max(), 101)
-# 
+# v_vec = np.linspace(v.min(), v.max(), 1001)
 # 
 # mu_0 = np.zeros(2, dtype=np.float64)
 # s_0 = np.zeros(3, dtype=np.float64)
@@ -217,7 +216,6 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # plt.show()
 
 
-
 ## ====================
 # Verify soln after upcrossing
 
@@ -240,6 +238,7 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # print(f"p(v) INTEGRAL: {p_v_integral}")
 # p_v /= p_v_integral
 # 
+# 
 # # simulate with initial conditions of upcrossing
 # t = 10.
 # t_vec = np.arange(0, t+p.dt, p.dt)
@@ -254,10 +253,8 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # xv[...,1] = sim.z[...,1]
 # xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
 # 
-# 
 # soln_fn = jax.vmap(ou_soln_xv_upcrossing_v_delta_x, in_axes=(0, None, None, None, None, None, None))
 # #soln_fn = jax.vmap(soln_fn, in_axes=(None, None, None, None, None, 0, None))
-# 
 # 
 # plot_ind = 10
 # 
@@ -277,7 +274,8 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 #             0.,
 #             t_vec[plot_ind],
 #             p)
-# 
+# f = np.array(f)
+# f[np.isnan(f)] = 0
 # 
 # f = f.reshape((101, 101))
 # fig = plt.figure()
@@ -287,12 +285,11 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # plt.show()
 
 
-
 ## ====================
+
 # Verify second upcrossing probability
 
 # simulate expectation / covariance for first upcrossing
-
 
 t1_sim = 10.
 p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=100000)
@@ -326,21 +323,25 @@ xv = np.zeros_like(sim.z)
 xv[...,1] = sim.z[...,1]
 xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
 
-soln_fn = jax.vmap(ou_soln_xv_upcrossing_v_delta_x, in_axes=(0, None, None, None, None, None, None))
+soln_fn = jax.vmap(ou_soln_xv_after_upcrossing, in_axes=(0, None, None, None, None, None, None))
 
-plot_ind = 2
+plot_ind = 100
 
-zmin, zmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+vdiff = vmax - vmin
+vmin, vmax = vmin - 0.5 * vdiff, vmax + 0.5 * vdiff
 xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+xdiff = xmax - xmin
+xmin, xmax = xmin - 0.5 * xdiff, xmax + 0.5 * xdiff
 xmean = xv[plot_ind,:,1].mean()
 
-v_vec = np.linspace(-0.0015, 0.01, 1001)
+v_vec = np.linspace(vmin, vmax, 1001)
 # x_vec = np.array([xmin, p.threshold, xmean])
 x_vec = np.linspace(xmin, xmax, 1001)
 vv, xx = np.meshgrid(v_vec, x_vec, indexing="ij")
 z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
 
-arg_f1, f1, t2, arg, f = soln_fn(z_arr,
+f = soln_fn(z_arr,
             mu_xy[upcrossing_ind],
             s_xv[upcrossing_ind],
             p.threshold,
@@ -349,12 +350,12 @@ arg_f1, f1, t2, arg, f = soln_fn(z_arr,
             p)
 
 f = f.reshape((len(v_vec), len(x_vec)))
-arg_f1 = arg_f1.reshape((len(v_vec), len(x_vec)))
-f1 = f1.reshape((len(v_vec), len(x_vec)))
-t2 = t2.reshape((len(v_vec), len(x_vec)))
-arg = arg.reshape((len(v_vec), len(x_vec)))
+# arg_f1 = arg_f1.reshape((len(v_vec), len(x_vec)))
+# f1 = f1.reshape((len(v_vec), len(x_vec)))
+# t2 = t2.reshape((len(v_vec), len(x_vec)))
+# arg = arg.reshape((len(v_vec), len(x_vec)))
 
-for i in range(0,100, 10):
+for i in range(0,400, 40):
     fig = plt.figure()
     fig.set_size_inches(sz)
     a = f[:,i]
@@ -362,55 +363,56 @@ for i in range(0,100, 10):
     nan_a[np.isnan(nan_a)] = 0
     a_norm = nan_a / np.trapz(nan_a, x=v_vec)
 
-    norm1_arg = arg_f1[:,i]
-    norm1 = f1[:,i]
-
-    q = np.asarray(arg[:,i])
-    norm2 = -np.pi ** 0.5 * q * np.exp(q ** 2 + norm1_arg) * erfc(q)
-    norm3 = -np.pi ** 0.5 * np.exp(q ** 2 + norm1_arg)
-
     dx = v_vec[1] - v_vec[0]
 
     e = np.sum(a_norm * v_vec) * dx
     s = np.sum(a_norm * (v_vec - e ) ** 2) * dx
     n = norm.pdf(v_vec, loc=e, scale=s ** 0.5)
-
-    exp_prod = np.exp(arg_f1[:,i] + arg[:,i] ** 2)
-    exp_prod[np.isnan(exp_prod)] = 0
+    n = n / n.max() * np.nanmax(a) 
 
     plt.plot(v_vec, a, c="royalblue", label="Final dist.")
-    plt.plot(v_vec, norm1, c="orange", label="Dist. from $\dot{b}_1$")
-    plt.plot(v_vec, norm2, c="red", label="Correction")
+    plt.plot(v_vec, n, c="black", label="Normal approx.", linestyle="--")
     plt.legend()
-
-#     plt.figure()
-#     qvec = np.linspace(-15, 15, 1001)
-#     xvec = np.linspace(-250, 10, 1001)
-#     qq, xx = np.meshgrid(qvec, xvec, indexing="ij")
-#     grid = np.stack((qq, xx), axis=-1).reshape((-1, 2))
-#     
-#     vals = []
-#     for (q_, x_) in grid:
-#         vals.append(func2(q_, x_))
-#     vals = np.array(vals).reshape((len(qvec), len(xvec)))
-#     
-#     plt.pcolormesh(qq, xx, vals, vmin=-1, vmax=1)
-#     plt.scatter(q, norm1_arg, s=1.)
-#     plt.xlim(qvec[0], qvec[-1])
-#     plt.ylim(xvec[0], xvec[-1])
 
     plt.show()
 
-# a = np.linspace(-20, 20, 1001)
-# plt.plot(a, a * erfc(a))
-# plt.show()
+## TEMP CELL
+
+
 
 def func1(quad):
     return np.exp(quad)
 
 def func2(q, quad):
     return -q * np.exp(q ** 2 + quad) * np.pi ** 0.5 * erfc(q)
- 
+
+
+vvec = np.linspace(-0.015, 0.01, 1001)
+xval = 0.01
+xvec = np.zeros_like(vvec) + xval
+z = np.stack((vvec, xvec), axis=1)
+
+mu0 = mu_xy[upcrossing_ind]
+s0 = s_xv[upcrossing_ind]
+
+def compute_q_d(z, b_0, b_dot_0, t, mu_0, s_0):
+    alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
+    beta *= p.threshold
+    mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
+    S = ou_soln_upcrossing_S(t, p)
+    S_inv = jnp.linalg.solve(S, jnp.eye(2))
+    c0 = (z - beta).T.dot(S_inv).dot(z - beta) + mu_v_x ** 2 / s_v_x
+    c1 = 2 * alpha.T.dot(S_inv).dot(-z + beta) - 2 * mu_v_x / s_v_x
+    c2 = alpha.T.dot(S_inv).dot(alpha) + 1. / s_v_x
+    dvec = -0.5 * (c0 + b_dot_0 * (c1 + b_dot_0 * c2))
+    qvec = (c1 + 2 * b_dot_0 * c2) / (2 ** 1.5 * c2 ** 0.5)
+    return qvec, dvec
+
+
+compute_q_d_vec = jax.vmap(compute_q_d, in_axes=(0,None,None,None,None,None))
+qs, ds = compute_q_d_vec(z, p.threshold, 0, 0.01, mu0, s0)
+
+
 qvec = np.linspace(-15, 15, 1001)
 xvec = np.linspace(-250, 10, 1001)
 qq, xx = np.meshgrid(qvec, xvec, indexing="ij")
@@ -418,16 +420,31 @@ grid = np.stack((qq, xx), axis=-1).reshape((-1, 2))
 
 vals = []
 for (q_, x_) in grid:
-    vals.append(func2(q_, x_))
+    vals.append(func2(q_, x_) + func1(x_))
 vals = np.array(vals).reshape((len(qvec), len(xvec)))
 
+## 
+
+qvals = np.linspace(-15, 10, 1001)
+quadvals = -(2 * qvals) ** 2 
+
+
+fvals = func1(quadvals) + func2(qvals, quadvals)
+fvals /= fvals.sum()
+a = np.arange(len(fvals))
+e = np.sum(a * fvals)
+s = np.sum((a - e) ** 2 * fvals)
+n = norm.pdf(a, loc=e, scale=np.sqrt(s))
+plt.plot(fvals)
+plt.plot(n, '--')
+plt.show()
+
+
+
 plt.pcolormesh(qq, xx, vals, vmin=-1, vmax=1)
-for i in range(0, 200, 20):
-    norm1_arg = arg_f1[:,i]
-    q = np.asarray(arg[:,i])
-    plt.scatter(q, norm1_arg, s=1.)
-plt.xlim(qvec[0], qvec[-1])
-plt.ylim(xvec[0], xvec[-1])
+plt.scatter(qvals, quadvals, s=1.)
+# plt.xlim(qvec[0], qvec[-1])
+# plt.ylim(xvec[0], xvec[-1])
 plt.show()
 
 

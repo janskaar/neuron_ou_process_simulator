@@ -555,11 +555,19 @@ def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
     S_inv = jnp.linalg.solve(S, jnp.eye(2))
 
 
-#    prefactor1 = 1 / np.sqrt(2 * np.pi * s_0[2]) * np.exp(-0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2])
-    prefactor2 = 1 / np.sqrt(2 * np.pi * s_v_x)
-    prefactor3 = 1 / np.sqrt(2 * np.pi * np.linalg.det(S) ** 0.5)
-    prefactor4 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
-    prefactor =  prefactor2 * prefactor3 * prefactor4
+#     prefactor1 = 1 / np.sqrt(2 * np.pi * s_0[2]) * np.exp(-0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2])
+#     prefactor2 = 1 / np.sqrt(2 * np.pi * s_v_x)
+#     prefactor3 = 1 / np.sqrt(2 * np.pi * np.linalg.det(S) ** 0.5)
+#     prefactor4 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
+#     prefactor =  prefactor2 * prefactor3 * prefactor4
+
+
+    # normalizing factors
+    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / (2 * np.pi * np.sqrt(np.linalg.det(S)))  # prefactor from normal dist. p(v, x) at time t
+    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
+ 
+    prefactor = f1 * n1 * n2
 
     c0 = (z - beta).T.dot(S_inv).dot(z - beta) + mu_v_x ** 2 / s_v_x
     c1 = 2 * alpha.T.dot(S_inv).dot(-z + beta) - 2 * mu_v_x / s_v_x
@@ -572,8 +580,8 @@ def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
 
     t2 = arg * jnp.exp(arg ** 2) * np.pi ** 0.5 * jsp.special.erfc(arg)
     
-    return arg_f1, f1 * c2, t2, arg, f1 * (1 - t2) * c2
-#    return prefactor * f1 * (1 - t2)
+#    return arg_f1, f1 * c2, t2, arg, f1 * (1 - t2) * c2
+    return prefactor * f1 * (1 - t2)
 
 
 
@@ -607,9 +615,9 @@ def ou_soln_marginal_x_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
     prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
 
     # normalizing factors
-    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
-    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)
-    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)
+    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
+    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
     
     return f1 * n1 * n2 * prefactor * erfterm
 
@@ -638,9 +646,11 @@ def ou_soln_marginal_v_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
     prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
 
     # normalizing factors
-    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
-    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)
-    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)
+    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
+    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
+ 
+
 
     return f1 * n1 * n2 * prefactor * np.exp(exparg) * erfterm
 
