@@ -15,8 +15,9 @@ from neurosim.simulator import SimulationParameters, MomentsSimulator, MembraneP
 from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot
 from neurosim.n_functions import ou_soln_v_upcrossing_v_delta_x, compute_p_v_upcrossing, conditional_bivariate_gaussian, gaussian_pdf
 from neurosim.n_functions import ou_soln_x_upcrossing_v_delta_x
-from neurosim.n_functions import ou_soln_marginal_x_upcrossing_v_delta_x
-from neurosim.n_functions import ou_soln_xv_upcrossing_v_delta_x
+from neurosim.n_functions import ou_soln_marginal_x_after_upcrossing
+from neurosim.n_functions import ou_soln_marginal_v_after_upcrossing
+from neurosim.n_functions import ou_soln_xv_after_upcrossing
 from neurosim.n_functions import ou_soln_xv_integrand
 from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
 
@@ -63,6 +64,8 @@ def var_y(t, p):
 
 vmins, vmaxs = [-0.025, -0.025, -0.025], [0.025, 0.025, 0.025]
 xmins, xmaxs = [0.0099, 0.0095, 0.002], [0.0105, 0.05, 0.04]
+vmin, vmax = -0.025, 0.025
+xmin, xmax = 0.005, 0.04
 
 f1 = integral_f1_xdot(p.threshold, 0, mu_xv, s_xv)
 mu_0, s_0 = conditional_bivariate_gaussian(p.threshold, mu_xv[sim_ind], s_xv[sim_ind])
@@ -71,40 +74,37 @@ b_dot_0 = 0
 b_0 = p.threshold
 
 fig, ax = plt.subplots(ncols=3, nrows=2)
+fig.set_size_inches(sz)
 
 t_plots = [0.02, 0.1, 1.0]
 
 for i in range(3):
-    vs = np.linspace(vmins[i], vmaxs[i], 1001)
-    xs = np.linspace(xmins[i], xmaxs[i], 1001)
+    vs = np.linspace(vmin, vmax, 10001)
+    xs = np.linspace(xmin, xmax, 10001)
     t_plot = t_plots[i]
     ind_plot = int(t_plot / p.dt)
     
-    ou_soln_v = ou_soln_v_upcrossing_v_delta_x(vs, mu_0, s_0, f_0, b_0, b_dot_0, t_plot, p)
-    ou_soln_x_old = ou_soln_x_upcrossing_v_delta_x(xs, mu_0, s_0, 1, b_0, b_dot_0, t_plot, p)
-    
-    ou_soln_x = ou_soln_marginal_x_upcrossing_v_delta_x(xs, mu_xv[sim_ind], s_xv[sim_ind], p.threshold, 0, t_plot, p)
-    ax[0,i].plot(vs, ou_soln_v, label="analytical")
-    _, ymax = ax[0,i].get_ylim()
-    ax[0,i].set_ylim(0, ymax)
-    twax = ax[0,i].twinx()
-    twax.hist(xv[ind_plot,:,0], density=True, bins=vs, histtype="step", color="C1", label="simulation")
-    twax.set_yticks([])    
+    ou_soln_v = ou_soln_marginal_v_after_upcrossing(vs, mu_xv[sim_ind], s_xv[sim_ind], p.threshold, 0, t_plot, p)
+    ou_soln_x = ou_soln_marginal_x_after_upcrossing(xs, mu_xv[sim_ind], s_xv[sim_ind], p.threshold, 0, t_plot, p)
+
+
+    a, b = xv[ind_plot,:,0].min(), xv[ind_plot,:,0].max()
+    a -= np.abs(a) * 0.01
+    b += np.abs(b) * 0.01
+    bins = np.linspace(a, b, 101)
+    ax[0,i].hist(xv[ind_plot,:,0], density=True, bins=bins, histtype="step", color="C1", label="simulation")
+    ax[0,i].plot(vs, ou_soln_v, label="analytical", linestyle="--")
     ax[0,i].set_xlabel("$\dot{x}$")
 
-    ax[1,i].plot(xs, ou_soln_x)
-#    ax[1,i].plot(xs, ou_soln_x_old)
-    _, ymax = ax[1,i].get_ylim()
-    ax[1,i].set_ylim(0, ymax)
-    twax = ax[1,i].twinx()
-    twax.hist(xv[ind_plot,:,1], density=True, bins=xs, histtype="step", color="C1")
-    twax.set_yticks([])    
-    a, b = twax.get_ylim()
-#    twax.set_ylim(a, b * 0.9)
+    a, b = xv[ind_plot,:,1].min(), xv[ind_plot,:,1].max()
+    a -= np.abs(a) * 0.01
+    b += np.abs(b) * 0.01
+    bins = np.linspace(a, b, 101)
+    ax[1,i].hist(xv[ind_plot,:,1], density=True, bins=bins, histtype="step", color="C1")
+    ax[1,i].plot(xs, ou_soln_x, linestyle="--")
     ax[1,i].set_xlabel("$x$")
     ax[0,i].set_title(f"{t_plot:.1f} ms")
 
-ax[0,0].plot(0,0, label="simulation")
 ax[0,0].set_ylabel("pdf")
 ax[1,0].set_ylabel("pdf")
 ax[0,0].legend()

@@ -543,7 +543,7 @@ def ou_soln_xv_integrand(z, mu_0, s_0, v_0, b_0, b_dot_0, t, p):
 
 
 
-def ou_soln_xv_upcrossing_v_delta_x(z, mu_0, s_0, b_0, b_dot_0, t, p):
+def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
     # equation implemented as in note
        
 
@@ -578,7 +578,7 @@ def ou_soln_xv_upcrossing_v_delta_x(z, mu_0, s_0, b_0, b_dot_0, t, p):
 
 
 @ignore_numpy_warnings
-def ou_soln_marginal_x_upcrossing_v_delta_x(x, mu_0, s_0, b_0, b_dot_0, t, p):
+def ou_soln_marginal_x_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
     alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
     alpha = alpha[1]
     beta = beta[1]
@@ -586,12 +586,46 @@ def ou_soln_marginal_x_upcrossing_v_delta_x(x, mu_0, s_0, b_0, b_dot_0, t, p):
     sigma2_t = S[1,1]
     beta *= b_0
 
-    p_b_0 = gaussian_pdf(b_0, mu_0[1], s_0[2])
     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
 
     q = (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x - b_dot_0 * (sigma2_t + alpha ** 2 * s_v_x))\
              / np.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
 
+    exparg = mu_v_x ** 2 * sigma2_t\
+            + (x - beta) ** 2 * s_v_x\
+            + b_dot_0 ** 2 * (sigma2_t + alpha ** 2 * s_v_x) \
+            - 2 * b_dot_0 * (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x)
+    exparg = -exparg / (2 * sigma2_t * s_v_x)
+
+    # move outer exponential inside paranthesis to cancel out exp(q) so it won't explode
+
+    erfterm1 = np.exp(exparg) / np.sqrt(np.pi)
+    erfterm2 =  q * np.exp(q ** 2 + exparg) * (1 + erf(q))
+    erfterm = erfterm1 + erfterm2
+
+
+    prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
+
+    # normalizing factors
+    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
+    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)
+    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)
+    
+    return f1 * n1 * n2 * prefactor * erfterm
+
+@ignore_numpy_warnings
+def ou_soln_marginal_v_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
+    alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
+    alpha = alpha[0]
+    beta = beta[0]
+    S = ou_soln_upcrossing_S(t, p)
+    sigma2_t = S[0,0]
+    beta *= b_0
+
+    mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
+
+    q = (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x - b_dot_0 * (sigma2_t + alpha ** 2 * s_v_x))\
+             / np.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
 
     exparg = mu_v_x ** 2 * sigma2_t\
             + (x - beta) ** 2 * s_v_x\
@@ -609,6 +643,7 @@ def ou_soln_marginal_x_upcrossing_v_delta_x(x, mu_0, s_0, b_0, b_dot_0, t, p):
     n2 = 1. / np.sqrt(2 * np.pi * s_v_x)
 
     return f1 * n1 * n2 * prefactor * np.exp(exparg) * erfterm
+
 
 
 
