@@ -62,7 +62,7 @@ def var_y(t, p):
 
 
 vmins, vmaxs = [-0.025, -0.025, -0.025], [0.025, 0.025, 0.025]
-xmins, xmaxs = [0.0099, 0.0095, 0.002], [0.0105, 0.012, 0.03]
+xmins, xmaxs = [0.0099, 0.0095, 0.002], [0.0105, 0.05, 0.04]
 
 f1 = integral_f1_xdot(p.threshold, 0, mu_xv, s_xv)
 mu_0, s_0 = conditional_bivariate_gaussian(p.threshold, mu_xv[sim_ind], s_xv[sim_ind])
@@ -100,7 +100,7 @@ for i in range(3):
     twax.hist(xv[ind_plot,:,1], density=True, bins=xs, histtype="step", color="C1")
     twax.set_yticks([])    
     a, b = twax.get_ylim()
-    twax.set_ylim(a, b * 0.9)
+#    twax.set_ylim(a, b * 0.9)
     ax[1,i].set_xlabel("$x$")
     ax[0,i].set_title(f"{t_plot:.1f} ms")
 
@@ -111,11 +111,6 @@ ax[0,0].legend()
 
 plt.show()
 
-p_x = ou_soln_marginal_x_upcrossing_v_delta_x(xs, mu_xv[sim_ind], s_xv[sim_ind], p.threshold, 0, 1.0, p)
-plt.plot(p_x)
-plt.twinx()
-plt.plot(ou_soln_x, "C1")
-plt.show()
 
 
 

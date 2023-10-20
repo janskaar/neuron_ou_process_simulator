@@ -400,10 +400,6 @@ def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
     alpha = v_term
     beta = -b_0 * x_term
 
-    print("old")
-    print("Alpha: ", alpha)
-    print("Beta: ", beta)
-
     arg1 = (mu_0 ** 2 * s_t\
          + (v + beta) ** 2 * s_0\
          + b_dot_0 ** 2 * (s_t + alpha ** 2 * s_0)\
@@ -428,9 +424,6 @@ def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
     t1 = (2 / np.pi) ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0 * e2
     t2 = (mu_0 * s_t + alpha * (v + beta) * s_0 - b_dot_0 * (s_t + alpha ** 2 * s_0)) * (1 + erf(arg3))
     
-    print("Q: ", arg3)
-    print("expArg: ", arg1)
-    print("====================")
     return f1 * e1 * (t1 + t2)
 
 def ou_soln_upcrossing_alpha_beta(t, p):
@@ -593,9 +586,7 @@ def ou_soln_marginal_x_upcrossing_v_delta_x(x, mu_0, s_0, b_0, b_dot_0, t, p):
     sigma2_t = S[1,1]
     beta *= b_0
 
-    print("New")
-    print("Alpha: ", alpha)
-    print("Beta: ", beta)
+    p_b_0 = gaussian_pdf(b_0, mu_0[1], s_0[2])
     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
 
     q = (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x - b_dot_0 * (sigma2_t + alpha ** 2 * s_v_x))\
@@ -608,11 +599,16 @@ def ou_soln_marginal_x_upcrossing_v_delta_x(x, mu_0, s_0, b_0, b_dot_0, t, p):
             - 2 * b_dot_0 * (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x)
     exparg = -exparg / (2 * sigma2_t * s_v_x)
 
-    print("Q: ", q)
-    print("expArg: ", exparg)
-    print("====================")
     erfterm = 1 / np.sqrt(np.pi) + q * np.exp(q ** 2) * (1 + erf(q))
-    return 0.5 * np.exp(exparg) * erfterm
+
+    prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
+
+    # normalizing factors
+    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
+    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)
+    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)
+
+    return f1 * n1 * n2 * prefactor * np.exp(exparg) * erfterm
 
 
 
