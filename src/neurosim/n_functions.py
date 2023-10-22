@@ -209,8 +209,17 @@ def conditional_bivariate_gaussian(x, mu_xy, s_xy):
     return mu_x_y, s_x_y
 
 
+
 @ignore_numpy_warnings
-def integral_f1_xdot(b, b_dot, mu, s):
+def integral_f1_xdot(b_dot, mu_v_x, s_v_x):
+    t1 = jnp.sqrt(s_v_x) / jnp.sqrt(2*np.pi) * jnp.exp(-0.5*(b_dot-mu_v_x)**2 / s_v_x)
+    t2 = 0.5 * (b_dot - mu_v_x) * (1 - jsp.special.erf((b_dot-mu_v_x) / (jnp.sqrt(2) * jnp.sqrt(s_v_x))))
+    f1 = t1 - t2
+    jnp.nan_to_num(f1, copy=False)
+    return f1
+
+@ignore_numpy_warnings
+def integral_f1_xdot_gaussian(b, b_dot, mu, s):
     if len(mu.shape) == 1:
         mu = mu[None,:]
 
@@ -225,12 +234,12 @@ def integral_f1_xdot(b, b_dot, mu, s):
     s_xx = s[:,2]
 
     sigma2 = s_vv - s_xv**2 / s_xx
-    sigma = np.sqrt(sigma2)
+    sigma = jnp.sqrt(sigma2)
     mu = mu_v + s_xv / s_xx * (b - mu_x)
-    t1 = sigma / np.sqrt(2*np.pi) * np.exp(-0.5*(b_dot-mu)**2 / sigma2)
-    t2 = 0.5 * (b_dot - mu) * (1 - erf((b_dot-mu) / (np.sqrt(2) * sigma)))
+    t1 = sigma / jnp.sqrt(2*np.pi) * jnp.exp(-0.5*(b_dot-mu)**2 / sigma2)
+    t2 = 0.5 * (b_dot - mu) * (1 - jsp.special.erf((b_dot-mu) / (jnp.sqrt(2) * sigma)))
     f1 = t1 - t2
-    np.nan_to_num(f1, copy=False)
+    jnp.nan_to_num(f1, copy=False)
     return f1
  
 
@@ -262,7 +271,7 @@ def compute_n1(b, b_dot, mu_xv, s_xv):
     if len(s_xv.shape) == 1:
         s_xv = s_xv[None,:]
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
+    f1 = integral_f1_xdot_gaussian(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
@@ -282,7 +291,7 @@ def compute_n2(b, b_dot, mu_xv, s_xv):
             s_xv[:,2] is Var(X)
     """
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
+    f1 = integral_f1_xdot_gaussian(b, b_dot, mu_xv, s_xv)
     prob_b = pdf_b(b, mu_xv[:,1], s_xv[:,2])
     return f1 * prob_b
 
@@ -294,137 +303,10 @@ def compute_p_v_upcrossing(v, b, b_dot, mu_xv, s_xv):
 
     mu_v_b, s_v_b = conditional_bivariate_gaussian(b, mu_xv, s_xv)
 
-    f1 = integral_f1_xdot(b, b_dot, mu_xv, s_xv)
+    f1 = integral_f1_xdot_gaussian(b, b_dot, mu_xv, s_xv)
     p = gaussian_pdf(v, mu_v_b, s_v_b)
     return p * (v - b_dot) / f1
 
-
-
-def var_v_delta_init(t, p):
-    return (p.sigma2_noise * p.tau_y / 2.) * (1 - np.exp(-2 * t / p.tau_y))
-
-def compute_v_alpha(t, p):
-    return np.exp(-t / p.tau_y)
-
-
-
-def compute_mu_terms_v_t_upcrossing_v_delta_x(t, p):
-    delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
-
-    v_term = np.exp(-t / p.tau_y)\
-           - p.tau_y / (p.tau_x - p.tau_y) * delta_e
-
-    x_term = -delta_e * (1 / p.tau_x + p.tau_y / (p.tau_x * (p.tau_x - p.tau_y)))
-
-    return v_term, x_term
-
-
-def compute_cov_v_t_upcrossing_v_delta_x(t, p):
-    # Covariance propagator
-    B = np.array([[-2./p.tau_y,     0.     ,   0.   ],
-                  [ 1./p.C    ,-1/p.tau_tilde,   0.   ],
-                  [  0.     ,   2 / p.C    ,-2/p.tau_x]])
-
-    cov_prop = expm(B * t)
-    B_inv = np.linalg.solve(B, np.eye(3))
-    cov = -B_inv.dot(np.eye(3) - cov_prop)\
-            .dot(np.array([[p.sigma2_noise,0.,0.]]).T).squeeze()
-    
-    var_v = cov[0] / p.C ** 2 + cov[2] / p.tau_x ** 2 - 2 * cov[1] / (p.C * p.tau_x)
-    return var_v
-
-
-@ignore_numpy_warnings
-def ou_soln_v_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
-    s_t = compute_cov_v_t_upcrossing_v_delta_x(t, p)
-    v_term, x_term = compute_mu_terms_v_t_upcrossing_v_delta_x(t, p)
-
-    alpha = v_term
-    beta = b_0 * x_term
-
-    arg1 = (mu_0 ** 2 * s_t\
-         + (v + beta) ** 2 * s_0\
-         + b_dot_0 ** 2 * (s_t + alpha ** 2 * s_0)\
-         - 2 * b_dot_0 * (mu_0 * s_t + alpha * (v + beta) * s_0)\
-         ) / (2 * s_t * s_0)
-          
-    arg2 = (mu_0 * s_t\
-         + alpha * (v + beta) * s_0\
-         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
-         ) ** 2  / (2 * s_t * s_0 * (s_t + alpha ** 2 * s_0))
-
-    arg3 = (mu_0 * s_t\
-         + alpha * (v + beta) * s_0\
-         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
-         ) / (2 ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0)
-
-    f1 = (np.pi ** 0.5) / (2 ** 0.5 * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * (s_t + alpha ** 2 * s_0) * f_0 * np.sqrt(s_t))
-
-    e1 = np.exp(-arg1 + arg2)
-    e2 = np.exp(-arg2)
-
-    t1 = (2 / np.pi) ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0 * e2
-    t2 = (mu_0 * s_t + alpha * (v + beta) * s_0 - b_dot_0 * (s_t + alpha ** 2 * s_0)) * (1 + erf(arg3))
-    
-
-    return f1 * e1 * (t1 + t2)
-
-def compute_cov_x_t_upcrossing_v_delta_x(t, p):
-    # Covariance propagator
-    B = np.array([[-2./p.tau_y,     0.     ,   0.   ],
-                  [ 1./p.C    ,-1/p.tau_tilde,   0.   ],
-                  [  0.     ,   2 / p.C    ,-2/p.tau_x]])
-
-    cov_prop = expm(B * t)
-    B_inv = np.linalg.solve(B, np.eye(3))
-    cov = -B_inv.dot(np.eye(3) - cov_prop)\
-            .dot(np.array([[p.sigma2_noise,0.,0.]]).T).squeeze()
-    
-    return cov[2]
-
-def compute_mu_terms_x_t_upcrossing_v_delta_x(t, p):
-    delta_e = np.exp(-t / p.tau_x) - np.exp(-t / p.tau_y)
-
-    v_term = (p.tau_x * p.tau_y * delta_e) / (p.tau_x - p.tau_y)
-           
-    x_term = (p.tau_y * delta_e) / (p.tau_x - p.tau_y) + np.exp(-t / p.tau_x)
-
-    return v_term, x_term
-
-
-@ignore_numpy_warnings
-def ou_soln_x_upcrossing_v_delta_x(v, mu_0, s_0, f_0, b_0, b_dot_0, t, p):
-    s_t = compute_cov_x_t_upcrossing_v_delta_x(t, p)
-    v_term, x_term = compute_mu_terms_x_t_upcrossing_v_delta_x(t, p)
-
-    alpha = v_term
-    beta = -b_0 * x_term
-
-    arg1 = (mu_0 ** 2 * s_t\
-         + (v + beta) ** 2 * s_0\
-         + b_dot_0 ** 2 * (s_t + alpha ** 2 * s_0)\
-         - 2 * b_dot_0 * (mu_0 * s_t + alpha * (v + beta) * s_0)\
-         ) / (2 * s_t * s_0)
-          
-    arg2 = (mu_0 * s_t\
-         + alpha * (v + beta) * s_0\
-         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
-         ) ** 2  / (2 * s_t * s_0 * (s_t + alpha ** 2 * s_0))
-
-    arg3 = (mu_0 * s_t\
-         + alpha * (v + beta) * s_0\
-         - b_dot_0 * (s_t + alpha ** 2 * s_0)\
-         ) / (2 ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0)
-
-    f1 = (np.pi ** 0.5) / (2 ** 0.5 * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * (s_t + alpha ** 2 * s_0) * f_0 * np.sqrt(s_t))
-
-    e1 = np.exp(-arg1 + arg2)
-    e2 = np.exp(-arg2)
-
-    t1 = (2 / np.pi) ** 0.5 * s_t * (alpha ** 2 / s_t + 1 / s_0) ** 0.5 * s_0 * e2
-    t2 = (mu_0 * s_t + alpha * (v + beta) * s_0 - b_dot_0 * (s_t + alpha ** 2 * s_0)) * (1 + erf(arg3))
-    
-    return f1 * e1 * (t1 + t2)
 
 def ou_soln_upcrossing_alpha_beta(t, p):
     exp_tau_x = jnp.exp(-t / p.tau_x)
@@ -473,74 +355,11 @@ def ou_soln_xv_integrand(z, mu_0, s_0, v_0, b_0, b_dot_0, t, p):
     quad2 = d.T.dot(S_inv).dot(d)
 
     det_S = S[0,0] * S[1,1] - S[1,0] ** 2
-#     log_f1 = -0.5 * jnp.log(2 * np.pi * s_0[2])\
-#              -0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2]\
-#              -0.5 * jnp.log(2 * np.pi * s_v_x)\
-#              -0.5 * (v_0 - mu_v_x) ** 2 / s_v_x\
-#              -jnp.log(2 * np.pi) - 0.5 * jnp.log(det_S)\
-#              - 0.5 * quad2
 
     log_f1 = - 0.5 * quad2
     f = jnp.exp(log_f1) * (v_0 - b_dot_0)
     return f, quad2, S
     
-
-# def ou_soln_xv_upcrossing_v_delta_x(z, mu_0, s_0, b_0, b_dot_0, t, p):
-#     # Implementation differs from the equation in note by that we pull out
-#     # exp(q^2) factor of the [1 - q exp(q^2)Erf(q)] factor
-#     
-#     alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
-#     beta *= b_0
-#     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
-#     S = ou_soln_upcrossing_S(t, p)
-#     S_inv = jnp.linalg.solve(S, jnp.eye(2))
-#     quad1 = alpha.T.dot(S_inv).dot(alpha.T) # quadratic form of alphas
-# 
-#     m = (alpha * b_dot_0 + beta)
-#     d = z - m  # distance
-#     quad2 = d.T.dot(S_inv).dot(d)
-# 
-#     q = -alpha.T.dot(S_inv).dot(z - (alpha * b_dot_0 + beta)) + (b_dot_0 - mu_v_x) / s_v_x
-#     q /= 2 ** 1.5 * jnp.sqrt(quad1 + 1. / s_v_x)
-# 
-#     det_S = S[0,0] * S[1,1] - S[1,0] ** 2
-#     log_f1 = -0.5 * jnp.log(2 * np.pi * s_0[2])\
-#              -0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2]\
-#              -0.5 * jnp.log(2 * np.pi * s_v_x)\
-#              -jnp.log(2 * np.pi) - 0.5 * jnp.log(det_S)
-# 
-#     log_f2 = -jnp.log(quad1)
-#     log_f3 = -0.5 * quad2
-#     log_f4 =  q ** 2
-# 
-#     t1 = jnp.exp(-q ** 2)
-#     t2 = np.pi ** 0.5 * q * jsp.special.erfc(q)
-# 
-#     f = jnp.exp(log_f1 + log_f2 + log_f3 + log_f4) * (t1 - t2)
-# 
-#     return f, q, quad1, quad2, log_f3
-
-# def ou_soln_xv_upcrossing_v_delta_x(z, mu_0, s_0, b_0, b_dot_0, t, p):
-#     # equation implemented directly from mathematica form
-#        
-#     alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
-#     beta *= b_0
-#     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
-#     S = ou_soln_upcrossing_S(t, p)
-#     S_inv = jnp.linalg.solve(S, jnp.eye(2))
-# 
-#     c0 = (z - beta).T.dot(S_inv).dot(z - beta) + mu_v_x ** 2 / s_v_x
-#     c1 = 2 * alpha.T.dot(S_inv).dot(-z + beta) - 2 * mu_v_x / s_v_x
-#     c2 = alpha.T.dot(S_inv).dot(alpha) + 1. / s_v_x
-# 
-#     f1 = jnp.exp(-0.5 * (c0 + b_dot_0 * (c1 + b_dot_0 * c2))) / (2 * c2) ** 1.5
-# 
-#     arg = (c1 + 2 * b_dot_0 * c2) / (2 ** 1.5 * c2 ** 0.5)
-#     t1 = 2 ** 1.5 * c2 ** 0.5 
-#     t2 = (c1 + 2 * b_dot_0 * c2) * jnp.exp(arg ** 2) * np.pi ** 0.5 * jsp.special.erfc(arg)
-#     
-#     return f1, t1, t2, arg, f1 * (t1 - t2)
-
 
 
 def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
@@ -554,17 +373,9 @@ def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
     S = ou_soln_upcrossing_S(t, p)
     S_inv = jnp.linalg.solve(S, jnp.eye(2))
 
-
-#     prefactor1 = 1 / np.sqrt(2 * np.pi * s_0[2]) * np.exp(-0.5 * (b_0 - mu_0[1]) ** 2 / s_0[2])
-#     prefactor2 = 1 / np.sqrt(2 * np.pi * s_v_x)
-#     prefactor3 = 1 / np.sqrt(2 * np.pi * np.linalg.det(S) ** 0.5)
-#     prefactor4 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)
-#     prefactor =  prefactor2 * prefactor3 * prefactor4
-
-
     # normalizing factors
-    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
-    n1 = 1. / (2 * np.pi * np.sqrt(np.linalg.det(S)))  # prefactor from normal dist. p(v, x) at time t
+    f1 = 1. / integral_f1_xdot_gaussian(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / (2 * np.pi * jnp.sqrt(jnp.linalg.det(S)))  # prefactor from normal dist. p(v, x) at time t
     n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
  
     prefactor = f1 * n1 * n2
@@ -597,7 +408,7 @@ def ou_soln_marginal_x_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
 
     q = (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x - b_dot_0 * (sigma2_t + alpha ** 2 * s_v_x))\
-             / np.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
+             / jnp.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
 
     exparg = mu_v_x ** 2 * sigma2_t\
             + (x - beta) ** 2 * s_v_x\
@@ -607,17 +418,17 @@ def ou_soln_marginal_x_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
 
     # move outer exponential inside paranthesis to cancel out exp(q) so it won't explode
 
-    erfterm1 = np.exp(exparg) / np.sqrt(np.pi)
-    erfterm2 =  q * np.exp(q ** 2 + exparg) * (1 + erf(q))
+    erfterm1 = jnp.exp(exparg) / jnp.sqrt(np.pi)
+    erfterm2 =  q * jnp.exp(q ** 2 + exparg) * (1 + jsp.special.erf(q))
     erfterm = erfterm1 + erfterm2
 
 
     prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
 
     # normalizing factors
-    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
-    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
-    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
+    f1 = 1. / integral_f1_xdot_gaussian(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / jnp.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
+    n2 = 1. / jnp.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
     
     return f1 * n1 * n2 * prefactor * erfterm
 
@@ -633,7 +444,7 @@ def ou_soln_marginal_v_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
     mu_v_x, s_v_x = conditional_bivariate_gaussian(b_0, mu_0, s_0) 
 
     q = (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x - b_dot_0 * (sigma2_t + alpha ** 2 * s_v_x))\
-             / np.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
+             / jnp.sqrt(2 * sigma2_t * s_v_x * (alpha ** 2 * s_v_x + sigma2_t))
 
     exparg = mu_v_x ** 2 * sigma2_t\
             + (x - beta) ** 2 * s_v_x\
@@ -641,18 +452,16 @@ def ou_soln_marginal_v_after_upcrossing(x, mu_0, s_0, b_0, b_dot_0, t, p):
             - 2 * b_dot_0 * (mu_v_x * sigma2_t + alpha * (x - beta) * s_v_x)
     exparg = -exparg / (2 * sigma2_t * s_v_x)
 
-    erfterm = 1 / np.sqrt(np.pi) + q * np.exp(q ** 2) * (1 + erf(q))
+    erfterm = 1 / jnp.sqrt(np.pi) + q * jnp.exp(q ** 2) * (1 + jsp.special.erf(q))
 
-    prefactor = np.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
+    prefactor = jnp.sqrt(np.pi) * (s_v_x * sigma2_t) /  (alpha ** 2 * s_v_x + sigma2_t)
 
     # normalizing factors
-    f1 = 1. / integral_f1_xdot(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
-    n1 = 1. / np.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
-    n2 = 1. / np.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
- 
+    f1 = 1. / integral_f1_xdot_gaussian(b_0, b_dot_0, mu_0, s_0)  # prefactor from distribution p(v) at time 0
+    n1 = 1. / jnp.sqrt(2 * np.pi * sigma2_t)  # prefactor from normal dist. p(x) at time t
+    n2 = 1. / jnp.sqrt(2 * np.pi * s_v_x)     # prefactor from normal dist p(v|x=b) at time 0
 
-
-    return f1 * n1 * n2 * prefactor * np.exp(exparg) * erfterm
+    return f1 * n1 * n2 * prefactor * jnp.exp(exparg) * erfterm
 
 
 
