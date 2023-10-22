@@ -37,10 +37,6 @@ for seed in range(start, start + num_per_rank, 1):
                 grp = f.create_group(str(seed))
                 grp.create_dataset("N1", data=sim.N1)
                 grp.create_dataset("N2", data=sim.N2)
-#                 grp.create_dataset("y_t", data=sim.z[save_xy_ind,:,0])
-#                 grp.create_dataset("x_t", data=sim.z[save_xy_ind,:,1])
-                grp.create_dataset("y_t_crossing", data=sim.z[save_xy_ind,:,0][sim.upcrossings[save_xy_ind]])
-                grp.create_dataset("x_t_crossing", data=sim.z[save_xy_ind,:,1][sim.upcrossings[save_xy_ind]])
             break
         except BlockingIOError:
             time.sleep(0.5) 
