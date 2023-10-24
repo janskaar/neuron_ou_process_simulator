@@ -9,10 +9,6 @@ from scipy.linalg import expm
 from scipy.integrate import cumtrapz
 from scipy.stats import norm
 from abc import ABC, abstractmethod
-
-
-
-
 from scipy.special import erf, erfc
 from dataclasses import dataclass
 
@@ -106,7 +102,6 @@ class ParticleSimulator(SimulatorBase):
         self.cov_prop = covprop
         self.cov_prop_const = covconst
 
-
     def compute_propagators(self):
         A = np.array([[-1./self.p.tau_y, 0.],
                       [1./self.p.C, -1./self.p.tau_x]])
@@ -146,7 +141,6 @@ class ParticleSimulator(SimulatorBase):
 
             self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i])
             self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
-            
 
             if self.fix_x_threshold:
                 self.z[...,1][i,self.upcrossings[i]] = self.b[i]
@@ -164,14 +158,16 @@ class ParticleSimulator(SimulatorBase):
             for j in range(i+1, self.num_steps, 1):
                 self.N2[i,j] = float((self.upcrossings[i] & self.upcrossings[j]).sum())
 
+    def compute_first_passage_times(self):
+        self.fpt = self.upcrossings.argmax(0) * self.p.dt
+
     def propagate(self):
         i = self._step
         self.z[i] = self.expectation_prop.dot(self.z[i-1].T).T
         self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
 
-#        self.u[i] = self.u_prop * (self.u[i-1] - self.p.E_L) + self.p.R * self.p.I_e * (1 - self.u_prop)
 
-#        self.b[i] = self.p.threshold - self.u[i]
+
 
 class MembranePotentialSimulator(SimulatorBase):
     def __init__(self, u_0, params):
