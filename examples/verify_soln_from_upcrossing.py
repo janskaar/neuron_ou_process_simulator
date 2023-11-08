@@ -16,7 +16,7 @@ from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral
 
 from neurosim.n_functions import compute_p_v_upcrossing, conditional_bivariate_gaussian, gaussian_pdf
 from neurosim.n_functions import ou_soln_xv_after_upcrossing, ou_soln_marginal_x_after_upcrossing, ou_soln_marginal_v_after_upcrossing
-from neurosim.n_functions import ou_soln_xv_integrand
+from neurosim.n_functions import ou_soln_xv_integrand, ou_soln_xv_after_upcrossing_arguments
 from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
 
 phi = np.arctan(1080 / 1920)
@@ -157,66 +157,72 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # Verify integrand
 
 
-# # simulate expectation / covariance for first upcrossing
-# t1_sim = 10.
-# p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=10000)
-# mu_0 = np.zeros(2, dtype=np.float64)
-# s_0 = np.zeros(3, dtype=np.float64)
-# msim = MomentsSimulator(mu_0, s_0, p)
-# msim.simulate(t1_sim)
-# mu_xy = msim.mu
-# s_xy = msim.s
-# mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
-# upcrossing_ind = 900
-# 
-# 
-# t = 10.
-# num_steps = int(t / p.dt)
-# t_vec = np.arange(0, t+p.dt, p.dt)
-# 
-# y_0 = 1.3
-#  
-# z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
-# z_0[:,1] = p.threshold
-# z_0[:,0] = y_0
-# sim = ParticleSimulator(z_0, 0., p)
-# sim.simulate(t)
-# xv = np.zeros_like(sim.z)
-# xv[...,1] = sim.z[...,1]
-# xv[...,0] = -sim.z[...,1] / p.tau_x + sim.z[...,0] / p.C
-# v_0 = - p.threshold / p.tau_x + y_0 / p.C
-# 
-# plot_ind = 500
-# 
-# vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
-# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
-# 
-# v_vec = np.linspace(vmin, vmax, 101)
-# x_vec = np.linspace(xmin, xmax, 101)
-# vv, xx = np.meshgrid(v_vec, x_vec)
-# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
-# 
-# xv2 = xv[plot_ind]
-# 
-# soln_fn = jax.vmap(ou_soln_xv_integrand, in_axes=(0, None, None, None, None, None, None, None))
-# f, S = soln_fn(z_arr,
-#             mu_xy[upcrossing_ind],
-#             s_xv[upcrossing_ind],
-#             v_0,
-#             p.threshold,
-#             0.,
-#             t_vec[plot_ind],
-#             p)
-# 
-# f = f.reshape((101, 101))
-# fig = plt.figure()
-# ax = fig.add_subplot(1,1,1)
-# ax.scatter(xv2[:,0], xv2[:,1], s=1.)
-# ax.contour(vv, xx, f)
-# plt.show()
+# simulate expectation / covariance for first upcrossing
+t1_sim = 10.
+p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0.1, num_procs=10000)
+mu_0 = np.zeros(2, dtype=np.float64)
+s_0 = np.zeros(3, dtype=np.float64)
+msim = MomentsSimulator(mu_0, s_0, p)
+msim.simulate(t1_sim)
+mu_xy = msim.mu
+s_xy = msim.s
+mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
 
+usim = MembranePotentialSimulator(0., p)
+usim.simulate(t1_sim)
+b = usim.b
+b_dot = usim.b_dot
+
+upcrossing_ind = 900
+
+t = 10.
+num_steps = int(t / p.dt)
+t_vec = np.arange(0, t+p.dt, p.dt)
+
+y_0 = 1.3
+x_0 = 0.01 
+
+
+z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+z_0[:,0] = y_0
+z_0[:,1] = x_0
+np.random.seed(1234)
+sim = ParticleSimulator(z_0, 0., p)
+sim.simulate(t)
+xv = np.zeros_like(sim.z)
+xv[...,1] = sim.z[...,1]
+xv[...,0] = -sim.z[...,1] / p.tau_x + sim.z[...,0] / p.C
+v_0 = - x_0 / p.tau_x + y_0 / p.C
+
+plot_ind = 50
+
+vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+
+v_vec = np.linspace(vmin, vmax, 101)
+x_vec = np.linspace(xmin, xmax, 101)
+vv, xx = np.meshgrid(v_vec, x_vec)
+z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+
+xv2 = xv[plot_ind]
+
+soln_fn = jax.vmap(ou_soln_xv_integrand, in_axes=(0, None, None, None, None, None))
+f = soln_fn(z_arr,
+            v_0,
+            x_0,
+            b_dot[upcrossing_ind],
+            t_vec[plot_ind],
+            p)
+
+f = f.reshape((101, 101))
+fig = plt.figure()
+ax = fig.add_subplot(1,1,1)
+ax.scatter(xv2[:,0], xv2[:,1], s=1.)
+ax.contour(vv, xx, f)
+plt.show()
 
 ## ====================
+
 # Verify soln after upcrossing
 
 # # simulate expectation / covariance for first upcrossing
@@ -295,96 +301,96 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 
 # simulate expectation / covariance for first upcrossing
 
-t1_sim = 10.
-p = SimulationParameters(threshold=0.001, dt=0.01, I_e = 0., num_procs=100000)
-mu_0 = np.zeros(2, dtype=np.float64)
-s_0 = np.zeros(3, dtype=np.float64)
-msim = MomentsSimulator(mu_0, s_0, p)
-msim.simulate(t1_sim)
-mu_xy = msim.mu
-s_xy = msim.s
-mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
-upcrossing_ind_1 = 900
-
-# compute p(v) at upcrossing
-v_vec = np.linspace(0., 0.1, 10001)
-p_v = compute_p_v_upcrossing(v_vec, p.threshold, 0., mu_xv[upcrossing_ind_1], s_xv[upcrossing_ind_1]).squeeze()
-p_v_integral = np.trapz(p_v, x=v_vec)
-print(f"p(v) INTEGRAL: {p_v_integral}")
-p_v /= p_v_integral
-
-# simulate with initial conditions of upcrossing
-t = 5.
-t_vec = np.arange(0, t+p.dt, p.dt)
-z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
-v_0 = np.random.choice(v_vec, p=p_v * (v_vec[1] - v_vec[0]), size=p.num_procs, replace=True)
-y_0 = (v_0 + p.threshold / p.tau_x) * p.C
-z_0[:,0] = y_0
-z_0[:,1] = p.threshold
-sim = ParticleSimulator(z_0, 0., p)
-sim.simulate(t)
-xv = np.zeros_like(sim.z)
-xv[...,1] = sim.z[...,1]
-xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
-
-soln_fn_v_b = jax.vmap(ou_soln_xv_after_upcrossing, in_axes=(0, None, None, None, None, None, None))
-soln_fn_v_b = jax.vmap(soln_fn_v_b, in_axes=(None, None, None, None, None, 0, None))
-
-soln_fn_x = jax.vmap(ou_soln_marginal_x_after_upcrossing, in_axes=(None, None, None, None, None, 0, None))
-
-soln_fn_v = jax.vmap(ou_soln_marginal_v_after_upcrossing, in_axes=(None, None, None, None, None, 0, None))
-
-vmin, vmax = xv[:,:,0].min(), xv[:,:,0].max()
-vdiff = vmax - vmin
-vmin, vmax = vmin - 0.5 * vdiff, vmax + 0.5 * vdiff
-
-v_vec = np.linspace(vmin, vmax, 10001)
-z_arr = np.stack((v_vec, np.zeros_like(v_vec) + p.threshold), axis=1)
-
-p_v_b = soln_fn_v_b(z_arr,
-              mu_xy[upcrossing_ind_1],
-              s_xv[upcrossing_ind_1],
-              p.threshold,
-              0.,
-              t_vec,
-              p).squeeze()
-
-p_b = soln_fn_x(p.threshold,
-                mu_xy[upcrossing_ind_1],
-                s_xv[upcrossing_ind_1],
-                p.threshold,
-                0.,
-                t_vec,
-                p).squeeze()
-
-p_v = soln_fn_v(v_vec,
-                mu_xy[upcrossing_ind_1],
-                s_xv[upcrossing_ind_1],
-                p.threshold,
-                0.,
-                t_vec,
-                p).squeeze()
-
-p_v_b = p_v_b / p_b[:,None]
-
-p_v_b = jnp.nan_to_num(p_v_b)
-p_b = jnp.nan_to_num(p_b)
-def compute_mu_sigma(v, p_v):
-    e = jnp.trapz(p_v * v, x=v)
-    s = jnp.trapz(p_v * (v - e) ** 2, x=v)
-    return e, s
-
-compute_mu_sigma = jax.vmap(compute_mu_sigma, in_axes=(None, 0))
-mu, sigma = compute_mu_sigma(v_vec, p_v_b)
-
-nfunc = jax.vmap(integral_f1_xdot, in_axes=(None, 0, 0))
-
-n1 = nfunc(0, mu, sigma) * p_b
-
-plt.plot(sim.upcrossings.sum(1) / p.num_procs)
-plt.plot(n1 * p.dt)
-plt.show()
-
+# t1_sim = 10.
+# p = SimulationParameters(threshold=0.001, dt=0.01, I_e = 0., num_procs=10000)
+# mu_0 = np.zeros(2, dtype=np.float64)
+# s_0 = np.zeros(3, dtype=np.float64)
+# msim = MomentsSimulator(mu_0, s_0, p)
+# msim.simulate(t1_sim)
+# mu_xy = msim.mu
+# s_xy = msim.s
+# mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
+# upcrossing_ind_1 = 900
+# 
+# # compute p(v) at upcrossing
+# v_vec = np.linspace(0., 0.1, 10001)
+# p_v = compute_p_v_upcrossing(v_vec, p.threshold, 0., mu_xv[upcrossing_ind_1], s_xv[upcrossing_ind_1]).squeeze()
+# p_v_integral = np.trapz(p_v, x=v_vec)
+# print(f"p(v) INTEGRAL: {p_v_integral}")
+# p_v /= p_v_integral
+# 
+# # simulate with initial conditions of upcrossing
+# t = 1.
+# t_vec = np.arange(0, t+p.dt, p.dt)
+# z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+# v_0 = np.random.choice(v_vec, p=p_v * (v_vec[1] - v_vec[0]), size=p.num_procs, replace=True)
+# y_0 = (v_0 + p.threshold / p.tau_x) * p.C
+# z_0[:,0] = y_0
+# z_0[:,1] = p.threshold
+# sim = ParticleSimulator(z_0, 0., p)
+# sim.simulate(t)
+# xv = np.zeros_like(sim.z)
+# xv[...,1] = sim.z[...,1]
+# xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
+# 
+# soln_fn_v_b = jax.vmap(ou_soln_xv_after_upcrossing, in_axes=(0, None, None, None, None, None, None))
+# soln_fn_v_b = jax.vmap(soln_fn_v_b, in_axes=(None, None, None, None, None, 0, None))
+# 
+# soln_fn_x = jax.vmap(ou_soln_marginal_x_after_upcrossing, in_axes=(None, None, None, None, None, 0, None))
+# 
+# soln_fn_v = jax.vmap(ou_soln_marginal_v_after_upcrossing, in_axes=(None, None, None, None, None, 0, None))
+# 
+# vmin, vmax = xv[:,:,0].min(), xv[:,:,0].max()
+# vdiff = vmax - vmin
+# vmin, vmax = vmin - 0.5 * vdiff, vmax + 0.5 * vdiff
+# 
+# v_vec = np.linspace(vmin, vmax, 10001)
+# z_arr = np.stack((v_vec, np.zeros_like(v_vec) + p.threshold), axis=1)
+# 
+# p_v_b = soln_fn_v_b(z_arr,
+#               mu_xy[upcrossing_ind_1],
+#               s_xv[upcrossing_ind_1],
+#               p.threshold,
+#               0.,
+#               t_vec,
+#               p).squeeze()
+# 
+# p_b = soln_fn_x(p.threshold,
+#                 mu_xy[upcrossing_ind_1],
+#                 s_xv[upcrossing_ind_1],
+#                 p.threshold,
+#                 0.,
+#                 t_vec,
+#                 p).squeeze()
+# 
+# p_v = soln_fn_v(v_vec,
+#                 mu_xy[upcrossing_ind_1],
+#                 s_xv[upcrossing_ind_1],
+#                 p.threshold,
+#                 0.,
+#                 t_vec,
+#                 p).squeeze()
+# 
+# p_v_b = p_v_b / p_b[:,None]
+# 
+# p_v_b = jnp.nan_to_num(p_v_b)
+# p_b = jnp.nan_to_num(p_b)
+# def compute_mu_sigma(v, p_v):
+#     e = jnp.trapz(p_v * v, x=v)
+#     s = jnp.trapz(p_v * (v - e) ** 2, x=v)
+#     return e, s
+# 
+# compute_mu_sigma = jax.vmap(compute_mu_sigma, in_axes=(None, 0))
+# mu, sigma = compute_mu_sigma(v_vec, p_v_b)
+# 
+# nfunc = jax.vmap(integral_f1_xdot, in_axes=(None, 0, 0))
+# 
+# n1 = nfunc(0, mu, sigma) * p_b
+# 
+# plt.plot(sim.upcrossings.sum(1) / p.num_procs)
+# plt.plot(n1 * p.dt)
+# plt.show()
+# 
 # for i in range(10):
 #     t_ind = i * 1
 #     a = xv[t_ind,:,0]
@@ -402,8 +408,7 @@ plt.show()
 #     plt.plot(v_vec, p_v_b[t_ind])
 #     plt.show()
 
-
-## INVESTIGATE MSTERIOUS FUNCTION
+## ##INVESTIGATE MSTERIOUS FUNCTION
 
 # soln_fn = jax.vmap(ou_soln_xv_after_upcrossing, in_axes=(0, None, None, None, None, None, None))
 # 
@@ -424,15 +429,14 @@ plt.show()
 # z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
 # 
 # f = soln_fn(z_arr,
-#             mu_xy[upcrossing_ind],
-#             s_xv[upcrossing_ind],
+#             mu_xy[upcrossing_ind_1],
+#             s_xv[upcrossing_ind_1],
 #             p.threshold,
 #             0.,
 #             t_vec[plot_ind],
 #             p)
 # 
 # f = f.reshape((len(v_vec), len(x_vec)))
-# 
 # 
 # for i in range(0,400, 40):
 #     fig = plt.figure()
@@ -455,21 +459,22 @@ plt.show()
 # 
 #     plt.show()
 # 
-# 
 # def func1(quad):
 #     return np.exp(quad)
 # 
 # def func2(q, quad):
 #     return -q * np.exp(q ** 2 + quad) * np.pi ** 0.5 * erfc(q)
 # 
+# def func3(q, quad):
+#     return -q * np.exp(q ** 2 + quad)
 # 
 # vvec = np.linspace(-0.015, 0.01, 1001)
 # xval = 0.01
 # xvec = np.zeros_like(vvec) + xval
 # z = np.stack((vvec, xvec), axis=1)
 # 
-# mu0 = mu_xy[upcrossing_ind]
-# s0 = s_xv[upcrossing_ind]
+# mu0 = mu_xy[upcrossing_ind_1]
+# s0 = s_xv[upcrossing_ind_1]
 # 
 # def compute_q_d(z, b_0, b_dot_0, t, mu_0, s_0):
 #     alpha, beta = ou_soln_upcrossing_alpha_beta(t, p)
@@ -484,10 +489,8 @@ plt.show()
 #     qvec = (c1 + 2 * b_dot_0 * c2) / (2 ** 1.5 * c2 ** 0.5)
 #     return qvec, dvec
 # 
-# 
 # compute_q_d_vec = jax.vmap(compute_q_d, in_axes=(0,None,None,None,None,None))
 # qs, ds = compute_q_d_vec(z, p.threshold, 0, 0.01, mu0, s0)
-# 
 # 
 # qvec = np.linspace(-15, 15, 1001)
 # xvec = np.linspace(-250, 10, 1001)
@@ -498,12 +501,41 @@ plt.show()
 # for (q_, x_) in grid:
 #     vals.append(func2(q_, x_) + func1(x_))
 # vals = np.array(vals).reshape((len(qvec), len(xvec)))
+
+## 
+
+# zvals = np.linspace(-5, 5, 1001)
 # 
-# ## 
+# qvals = 1 * zvals
+# quadvals = -4 * zvals ** 2
 # 
-# qvals = np.linspace(-15, 10, 1001)
-# quadvals = -(2 * qvals) ** 2 
+# def func1(quad):
+#     return np.exp(quad)
 # 
+# def func2(q, quad):
+#     return -q * np.exp(q ** 2 + quad) * np.pi ** 0.5 * erfc(q)
+# 
+# def func3(q):
+#     return -q * np.exp(-q ** 2)
+# 
+# def func4(q):
+#     return -q * np.exp(-q ** 2) * erfc(q)
+# 
+# f1 = func1(quadvals)
+# f2 = func2(qvals, quadvals)
+# f3 = func3(qvals)
+# f4 = func4(qvals)
+# 
+# plt.plot(zvals, f1)
+# plt.plot(zvals, f2)
+# plt.plot(zvals, f1 + f2)
+# plt.plot(zvals, f3)
+# plt.plot(zvals, f4)
+# plt.show()
+# 
+# 
+# qq, xx = np.meshgrid(qvals, quadvals, indexing="ij")
+# grid = np.stack((qq, xx), axis=-1).reshape((-1, 2))
 # 
 # fvals = func1(quadvals) + func2(qvals, quadvals)
 # fvals /= fvals.sum()
@@ -511,12 +543,12 @@ plt.show()
 # e = np.sum(a * fvals)
 # s = np.sum((a - e) ** 2 * fvals)
 # n = norm.pdf(a, loc=e, scale=np.sqrt(s))
-# plt.plot(fvals)
-# plt.plot(n, '--')
-# plt.show()
 # 
+# plt.figure()
+# plt.plot(qvals, fvals)
+# plt.plot(qvals, n, '--')
 # 
-# 
+# plt.figure()
 # plt.pcolormesh(qq, xx, vals, vmin=-1, vmax=1)
 # plt.scatter(qvals, quadvals, s=1.)
 # # plt.xlim(qvec[0], qvec[-1])
