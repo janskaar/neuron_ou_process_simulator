@@ -149,77 +149,72 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # 
 # plt.show()
 
-
-
-
-
 ## ====================
 # Verify integrand
 
-
-# simulate expectation / covariance for first upcrossing
-t1_sim = 10.
-p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0.1, num_procs=10000)
-mu_0 = np.zeros(2, dtype=np.float64)
-s_0 = np.zeros(3, dtype=np.float64)
-msim = MomentsSimulator(mu_0, s_0, p)
-msim.simulate(t1_sim)
-mu_xy = msim.mu
-s_xy = msim.s
-mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
-
-usim = MembranePotentialSimulator(0., p)
-usim.simulate(t1_sim)
-b = usim.b
-b_dot = usim.b_dot
-
-upcrossing_ind = 900
-
-t = 10.
-num_steps = int(t / p.dt)
-t_vec = np.arange(0, t+p.dt, p.dt)
-
-y_0 = 1.3
-x_0 = 0.01 
-
-
-z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
-z_0[:,0] = y_0
-z_0[:,1] = x_0
-np.random.seed(1234)
-sim = ParticleSimulator(z_0, 0., p)
-sim.simulate(t)
-xv = np.zeros_like(sim.z)
-xv[...,1] = sim.z[...,1]
-xv[...,0] = -sim.z[...,1] / p.tau_x + sim.z[...,0] / p.C
-v_0 = - x_0 / p.tau_x + y_0 / p.C
-
-plot_ind = 50
-
-vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
-xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
-
-v_vec = np.linspace(vmin, vmax, 101)
-x_vec = np.linspace(xmin, xmax, 101)
-vv, xx = np.meshgrid(v_vec, x_vec)
-z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
-
-xv2 = xv[plot_ind]
-
-soln_fn = jax.vmap(ou_soln_xv_integrand, in_axes=(0, None, None, None, None, None))
-f = soln_fn(z_arr,
-            v_0,
-            x_0,
-            b_dot[upcrossing_ind],
-            t_vec[plot_ind],
-            p)
-
-f = f.reshape((101, 101))
-fig = plt.figure()
-ax = fig.add_subplot(1,1,1)
-ax.scatter(xv2[:,0], xv2[:,1], s=1.)
-ax.contour(vv, xx, f)
-plt.show()
+# # simulate expectation / covariance for first upcrossing
+# t1_sim = 10.
+# p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0.1, num_procs=10000)
+# mu_0 = np.zeros(2, dtype=np.float64)
+# s_0 = np.zeros(3, dtype=np.float64)
+# msim = MomentsSimulator(mu_0, s_0, p)
+# msim.simulate(t1_sim)
+# mu_xy = msim.mu
+# s_xy = msim.s
+# mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
+# 
+# usim = MembranePotentialSimulator(0., p)
+# usim.simulate(t1_sim)
+# b = usim.b
+# b_dot = usim.b_dot
+# 
+# upcrossing_ind = 900
+# 
+# t = 10.
+# num_steps = int(t / p.dt)
+# t_vec = np.arange(0, t+p.dt, p.dt)
+# 
+# y_0 = 1.3
+# x_0 = 0.01 
+# 
+# 
+# z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+# z_0[:,0] = y_0
+# z_0[:,1] = x_0
+# np.random.seed(1234)
+# sim = ParticleSimulator(z_0, 0., p)
+# sim.simulate(t)
+# xv = np.zeros_like(sim.z)
+# xv[...,1] = sim.z[...,1]
+# xv[...,0] = -sim.z[...,1] / p.tau_x + sim.z[...,0] / p.C
+# v_0 = - x_0 / p.tau_x + y_0 / p.C
+# 
+# plot_ind = 50
+# 
+# vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+# 
+# v_vec = np.linspace(vmin, vmax, 101)
+# x_vec = np.linspace(xmin, xmax, 101)
+# vv, xx = np.meshgrid(v_vec, x_vec)
+# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+# 
+# xv2 = xv[plot_ind]
+# 
+# soln_fn = jax.vmap(ou_soln_xv_integrand, in_axes=(0, None, None, None, None, None))
+# f = soln_fn(z_arr,
+#             v_0,
+#             x_0,
+#             b_dot[upcrossing_ind],
+#             t_vec[plot_ind],
+#             p)
+# 
+# f = f.reshape((101, 101))
+# fig = plt.figure()
+# ax = fig.add_subplot(1,1,1)
+# ax.scatter(xv2[:,0], xv2[:,1], s=1.)
+# ax.contour(vv, xx, f)
+# plt.show()
 
 ## ====================
 

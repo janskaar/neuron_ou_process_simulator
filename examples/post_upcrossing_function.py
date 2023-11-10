@@ -116,7 +116,7 @@ p_xv = soln_fn_xv(z_arr,
                   t_vec[t_ind],
                   p)
 
-q, quad, prefactor, alpha, beta, q_prefactor, S_inv = soln_fn_xv_args(z_arr,
+q, quad, prefactor, alpha, beta, q_prefactor, S, S_inv = soln_fn_xv_args(z_arr,
                                                                mu_xv[upcrossing_ind],
                                                                s_xv[upcrossing_ind],
                                                                b[upcrossing_ind],
@@ -131,6 +131,7 @@ quad = quad.reshape((len(v_vec), len(x_vec)))
 prefactor = prefactor[0]
 q_prefactor = q_prefactor[0]
 S_inv = S_inv[0]
+S = S[0]
 p_xv = p_xv.reshape((len(v_vec), len(x_vec)))
 
 ## 
@@ -142,32 +143,50 @@ ind = 50
 q_ = q[ind]
 quad_ = quad[ind]
 p_xv_ = p_xv[ind]
+xval = x_vec[ind]
 
 f = np.exp(quad_) - np.sqrt(np.pi) * q_ * np.exp(q_ ** 2 + quad_) * erfc(q_)
 g = np.sqrt(np.pi) * q_ * np.exp(q_ ** 2) * erfc(q_)
-g = np.sqrt(np.pi) * q_ * np.exp(q_ ** 2) * erfc(q_)
-dg_dq = 2 * q * g + g / q - 2 * q
+
+# v-value where quadratic is maximum
+mu_v = alpha[0] * b_dot[upcrossing_ind] + beta[0]
+mu_x = alpha[1] * b_dot[upcrossing_ind] + beta[1]
+mu_ = (alpha[0] - S[1,0] / S[1,1] * alpha[1]) * b_dot[upcrossing_ind] + beta[0] + S[1,0] / S[1,1] * (xval - beta[1])
+
+# zeroth order term
+q_mu, _, _, _, _, _, _, _ = soln_fn_xv_args(np.array([[mu_, xval]]),
+                                       mu_xv[upcrossing_ind],
+                                       s_xv[upcrossing_ind],
+                                       b[upcrossing_ind],
+                                       b_dot[upcrossing_ind],
+                                       t_vec[t_ind],
+                                       p)
+
+g_0 = np.sqrt(np.pi) * q_mu * np.exp(q_mu ** 2) * erfc(q_mu)   
+
+# first order term
+dg_dq = 2 * q_mu * g_0 + g_0 / q_mu - 2 * q_mu 
 # Prefactor is off by a factor 2 as it's computed in a slightly different form from the equation 
 dq_dv = -(alpha[0] * S_inv[0,0] + alpha[1] * S_inv[1,0]) * q_prefactor * 2
-
-# MU WRONG, IT'S A CONDITIONAL MEAN!!!!
-mu_ = alpha[0] * b_dot[upcrossing_ind] + beta[0]
-#line = 
-
-
+g_1 = dg_dq * dq_dv * (v_vec - mu_)
+g_lin = g_0 + g_1
 
 term1 = np.exp(quad_) * prefactor
 term2 = -np.sqrt(np.pi) * q_ * np.exp(q_ ** 2 + quad_) * erfc(q_) * prefactor
 
-plt.plot(v_vec, f, color="black", lw=2.)
-plt.plot(v_vec, np.exp(quad_) * (1 - g[ind]))
+plt.plot(v_vec, f, color="black", lw=2., label="exact solution")
+# plt.plot(v_vec, np.exp(quad_) * (1 - g))
+plt.plot(v_vec, np.exp(quad_) * (1 - g_lin), label="approximation", linestyle="--", color="C1")
 # plt.plot(v_vec, np.exp(quad_))
 # plt.plot(v_vec, np.sqrt(np.pi) * q_ * np.exp(q_ ** 2 + quad_) * erfc(q_))
-plt.twinx()
-plt.plot(v_vec, q_, "--")
-plt.plot(v_vec, q_ ** 2, "--")
-plt.plot(v_vec, quad_, "--")
-plt.ylim(-10, 10)
+# plt.twinx()
+# plt.plot(v_vec, q_, "--")
+# plt.plot(v_vec, q_ ** 2, "--")
+# plt.plot(v_vec, quad_, "--")
+# plt.ylim(-10, 10)
+plt.legend()
+plt.xlabel("$\dot{x}$")
+plt.xlim(-0.01, -0.004)
 plt.show()
 
 ##
@@ -176,8 +195,8 @@ a = np.linspace(-5, 10, 1001)
 plt.plot(a, 1 - np.sqrt(np.pi) * a * np.exp(a ** 2) * erfc(a), color="black", lw=2.)
 
 e_ = np.e * np.sqrt(np.pi) * erfc(1)
-#plt.plot(a, (1 - e_) + (2 - 3 * e_) * (a - 1) + (4 - 5 * e_) * (a - 1) ** 2)
-#plt.plot(a, 1 / (2 * a ** 2))
+# plt.plot(a, (1 - e_) + (2 - 3 * e_) * (a - 1) + (4 - 5 * e_) * (a - 1) ** 2)
+# plt.plot(a, 1 / (2 * a ** 2))
 plt.plot(a, -2 * np.sqrt(np.pi) * a * np.exp(a ** 2))
 plt.plot(a, -np.exp(a))
 plt.xlim(-5, 5)
@@ -192,9 +211,10 @@ plt.show()
 
 fig = plt.figure()
 ax = fig.add_subplot(1,1,1)
-ax.scatter(xv[t_ind,:,0], xv[t_ind,:,1], s=1.)
-levels = [100, 1000, 10000, 100000, 180000]
+ax.scatter(xv[t_ind,:,0], xv[t_ind,:,1], s=1., label="simulation")
+levels = [100, 1000, 10000, 100000, p_xv.max() * 0.9]
 c = ["C1"]
-ax.contour(vv, xx, p_xv.reshape((len(v_vec), len(x_vec))), levels=levels, colors=c)
+ax.contour(vv, xx, p_xv.reshape((len(v_vec), len(x_vec))), levels=levels, colors=c, label="analytical")
+ax.legend()
 plt.show()
 

@@ -379,7 +379,7 @@ def ou_soln_xv_after_upcrossing_arguments(z, mu_0, s_0, b_0, b_dot_0, t, p):
 
     q_prefactor = 1. / (2 ** 1.5 * c2 ** 0.5)
     q = (c1 + 2. * b_dot_0 * c2) * q_prefactor
-    return q, quadratic, prefactor, alpha, beta, q_prefactor, S_inv
+    return q, quadratic, prefactor, alpha, beta, q_prefactor, S, S_inv
 
 def ou_soln_xv_after_upcrossing(z, mu_0, s_0, b_0, b_dot_0, t, p):
     # Distribute exp(quad) for numerical stability

@@ -262,12 +262,10 @@ class MomentsSimulator(SimulatorBase):
             self.propagate()        
             self._step += 1
 
-
     def propagate(self):
         i = self._step
         self.s[i] = (self.cov_prop.dot(self.s[i-1][:,None]) - self.cov_prop_const).squeeze()
         self.mu[i] = self.expectation_prop.dot(self.mu[i-1][::,None]).squeeze()
-
 
     @property
     def s_xx(self):
