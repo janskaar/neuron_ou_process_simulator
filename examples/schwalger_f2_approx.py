@@ -34,14 +34,6 @@ t_vec = np.arange(0, t+p.dt, p.dt)
 
 stim = 0.5 * np.sin(t_vec)
 
-# moments
-mu_0 = np.zeros(2, dtype=np.float64)
-s_0 = np.zeros(3, dtype=np.float64)
-msim = MomentsSimulator(mu_0, s_0, p)
-msim.simulate(t)
-mu_xy = msim.mu
-s_xy = msim.s
-
 
 # particles
 m0 = np.zeros(2, dtype=np.float64)
@@ -60,6 +52,7 @@ xy = psim.z.copy()
 xy[...,0] /= p.C
 s = np.mean((xy[...,0] - xy[...,0].mean(1, keepdims=True)) * (xy[...,1] - xy[...,1].mean(1, keepdims=True)), axis=1)
 
+# solution of covariances given constant s_yy
 def compute_cov(p, t):
     tau_tilde = 1 / (1 / p.tau_x + 1 / p.tau_y)
     s_xy = tau_tilde * sigma2_y * (1 - np.exp(-t / tau_tilde))
@@ -67,78 +60,13 @@ def compute_cov(p, t):
     s_xx = tau_tilde * sigma2_y * p.tau_x * (1 - np.exp(-2 * t / p.tau_x)) \
         + (2 * tau_tilde * sigma2_y) / (2 / p.tau_x - 1 / tau_tilde) \
           * (np.exp(-2 * t / p.tau_x) - np.exp(-t / tau_tilde))
-    return np.array([[sigma2_y, s_xy], [s_xy, s_xx]])
+    s_yy = np.full(s_xx.shape, sigma2_y)
+    return np.stack((s_yy, s_xy, s_xx))
+    return np.array([[s_yy, s_xy], [s_xy, s_xx]]).transpose((2, 0, 1))
+
 
 ts = np.arange(0, t + p.dt * 0.5, p.dt)
-S_soln = []
-for t_ in ts:
-    S = compute_cov(p, t_)
-    S_soln.append(S)
-
-S_soln = np.array(S_soln)
-sigmas = np.array([S_soln[:,0,0], S_soln[:,0,1], S_soln[:,1,1]])
-
-xv = xy.copy()
-xv[...,0] -= xv[...,1] / p.tau_x
-
-x_dots = (xy[1:,:,1] - xy[:-1,:,1]) / p.dt
-
-num = 101
-xs = np.linspace(-60, 60, num)
-ys = np.linspace(-15, 15, num)
-vs = np.linspace(-15, 15, num)
-XX, VV = np.meshgrid(xs, vs)
-vx_grid = np.stack((VV, XX)).transpose(1,2,0).reshape((-1,2))
-vx_grid_shifted = vx_grid.copy()
-vx_grid_shifted[:,0] += vx_grid_shifted[:,1] / p.tau_x
-
-XX, YY = np.meshgrid(xs, vs)
-yx_grid = np.stack((YY, XX)).transpose(1,2,0).reshape((-1,2))
-
-from scipy.stats import multivariate_normal
-ind = 900
-cov = np.array([[sigmas[0,ind], sigmas[1,ind]], [sigmas[1,ind], sigmas[2,ind]]])
-mvn = multivariate_normal(mean=np.zeros(2), cov=cov)
-
-pdf = mvn.pdf(vx_grid_shifted).reshape((num, num))
-#plt.scatter(xv[ind,:,0], xv[ind,:,1], s=1)
-plt.scatter(x_dots[ind], xv[ind,:,1], s=1)
-plt.contour(VV, XX, pdf)
-plt.show()
-
-pdf = mvn.pdf(yx_grid).reshape((num, num))
-plt.scatter(xy[ind,:,0], xy[ind,:,1], s=1)
-plt.contour(YY, XX, pdf)
-plt.show()
-
-
-upcrossing_inds = (xv[ind,:,1] < psim.b[ind]) \
-                & (xv[ind,:,0] > psim.b_dot[ind])\
-                & (xv[ind,:,1] > psim.b[ind] - (xv[ind,:,0] - psim.b_dot[ind]) * p.dt)
-
-
-
-gs = GridSpec(2, 6)
-phi = np.arctan(1080 / 1920)
-sz = (14 * np.cos(phi), 14 * np.sin(phi)),  
-fig = plt.figure()
-fig.set_size_inches(*sz)
-s = np.mean((xy[...,0] - xy[...,0].mean(1, keepdims=True)) * (xy[...,1] - xy[...,1].mean(1, keepdims=True)), axis=1)
-ax3 = fig.add_subplot(gs[1,2:4])
-ax3.plot(s)
-ax3.plot(S_soln[:,1,0], '--')
-ax3.plot(S_soln[:,0,1], '--')
-
-ax4 = fig.add_subplot(gs[1,:2])
-ax4.plot(xy[...,0].var(1))
-ax4.plot(S_soln[:,0,0], '--')
-
-ax4 = fig.add_subplot(gs[1,4:])
-ax4.plot(xy[...,1].var(1))
-ax4.plot(S_soln[:,1,1], '--')
-
-gs.update(wspace=1.)
-plt.show()
+sigmas = compute_cov(p, ts)
 
 def schwalger_B(b, b_dot, s, p):
     t1 = (s[2] / p.tau_x ** 2 - 2 * s[1] / p.tau_x + s[0]) * b ** 2
@@ -199,7 +127,7 @@ fptd[0] = 0
 fptd = fptd / ( p.dt * p.num_procs )
 
 sim_lambda = psim.upcrossings.sum(1) / p.num_procs / p.dt
-surv = (1 - cumtrapz(fptd, x=ts))
+surv = (1 - cumtrapz(fptd, x=ts, initial=0))
 
 f1[np.isnan(f1)] = 0
 f2_hazard[np.isnan(f2_hazard)] = 0
@@ -210,14 +138,20 @@ f1_surv = np.exp(-cumtrapz(f1, x=ts, initial=0))
 f2_surv = np.exp(-cumtrapz(f2_hazard, x=ts, initial=0))
 
 
-plt.plot(surv)
-plt.plot(f1_surv, "--")
-plt.plot(f2_surv, "--")
-plt.show()
+fig, ax = plt.subplots(2, sharex=True)
 
+ax[0].plot(ts, fptd, c="black", label="simulation")
+ax[0].plot(ts, f1_fptd, c="C1", label="f1")
+ax[0].plot(ts, f2_fptd, c="C0", label="f2")
+ax[0].legend()
+ax[0].set_title("first passage time density")
 
-plt.plot(fptd)
-plt.plot(f1_fptd, "C1")
-plt.plot(f2_fptd, "C2")
+ax[1].plot(ts, surv, c="black")
+ax[1].plot(ts, f1_surv, "--", c="C1", label="f1")
+ax[1].plot(ts, f2_surv, "--", c="C0", label="f2")
+ax[1].set_title("survival function")
+ax[1].set_xlabel("time (ms)")
+
+fig.tight_layout()
 plt.show()
 
