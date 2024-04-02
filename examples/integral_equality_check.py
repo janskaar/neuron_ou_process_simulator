@@ -33,8 +33,8 @@ n1 = compute_n1(b[0], b_dot[0], mu_xv, s_xv)
 
 sim_ind = 35 
 
-E_y = compute_E_y_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind])
-E_y2 = compute_E_y2_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind])
+E_y = compute_E_y_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind], n1[sim_ind])
+E_y2 = compute_E_y2_upcrossing_constant_b(b[sim_ind], s_xv[sim_ind], n1[sim_ind])
 p_b = pdf_b(0.02, mu_xv[sim_ind,1], s_xv[sim_ind,2])
 
 num_samples = 1000000
@@ -67,6 +67,10 @@ pSim = ParticleSimulator(z_0,
                          p)
 
 pSim.simulate(t)
+
+z_crossing = pSim.z[sim_ind][pSim.upcrossings[sim_ind] | pSim.downcrossings[sim_ind]]
+
+
 z_upcrossing = pSim.z[sim_ind][pSim.upcrossings[sim_ind]] 
 v_upcrossing = -z_upcrossing[:,1] / p.tau_x + z_upcrossing[:,0] / p.C
 print()

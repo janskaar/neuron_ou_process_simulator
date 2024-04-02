@@ -13,7 +13,7 @@ from scipy.linalg import expm
 from scipy.stats import multivariate_normal
 sys.path.append("/home/janeirik/Repositories/neuron_ou_process_simulator/src")
 from neurosim.simulator import SimulationParameters, MomentsSimulator, MembranePotentialSimulator, ParticleSimulator
-from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot, compute_mu_var_v_upcrossing
+from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral_f1_xdot
 
 p = SimulationParameters(threshold=0.02, dt=0.01, I_e = 0., num_procs=100000)
 
@@ -103,7 +103,6 @@ s = np.mean((psim.z[...,0] - psim.z[...,0].mean(1, keepdims=True)) * (psim.z[...
 ax3 = fig.add_subplot(gs[1,2:4])
 ax3.plot(s)
 ax3.plot(S_soln[:,0,1], '--')
-
 
 ax4 = fig.add_subplot(gs[1,:2])
 ax4.plot(psim.z[...,0].var(1))

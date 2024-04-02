@@ -17,7 +17,6 @@ from neurosim.n_functions import compute_n1, pdf_b, xv_to_xy, xy_to_xv, integral
 from neurosim.n_functions import compute_p_v_upcrossing, conditional_bivariate_gaussian, gaussian_pdf
 from neurosim.n_functions import ou_soln_xv_after_upcrossing, ou_soln_marginal_x_after_upcrossing, ou_soln_marginal_v_after_upcrossing
 from neurosim.n_functions import ou_soln_xv_integrand, ou_soln_xv_after_upcrossing_arguments
-from neurosim.n_functions import ou_soln_upcrossing_alpha_beta, ou_soln_upcrossing_S
 
 phi = np.arctan(1080 / 1920)
 sz = (14 * np.cos(phi), 14 * np.sin(phi))
@@ -69,6 +68,9 @@ sim.simulate(t)
 xv = np.zeros_like(sim.z)
 xv[...,1] = sim.z[...,1]
 xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
+
+
+##
 
 # Create different linspaces per time step, based on values
 # from simulation
@@ -143,12 +145,93 @@ p_v = soln_fn_v(v_vecs,
 
 ## 
 
-index = 100
+# # compute p(v) at upcrossing
+# v_vec = np.linspace(b_dot[upcrossing_ind_1], 0.1, 10001)
+# p_v_0 = compute_p_v_upcrossing(v_vec, b[upcrossing_ind_1], b_dot[upcrossing_ind_1], mu_xv[upcrossing_ind_1], s_xv[upcrossing_ind_1]).squeeze()
+# p_v_integral = np.trapz(p_v_0, x=v_vec)
+# print(f"p(v) INTEGRAL: {p_v_integral}")
+# p_v_0 /= p_v_integral
+# 
+# p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0.1, num_procs=500000)
+# z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
+# #v_0 = np.random.choice(v_vec, p=p_v_0 * (v_vec[1] - v_vec[0]), size=p.num_procs, replace=True)
+# y_0 = (v_vec[400] + b[upcrossing_ind_1] / p.tau_x) * p.C
+# z_0[:,0] = y_0
+# z_0[:,1] = b[upcrossing_ind_1]
+# 
+# # simulate with initial conditions of upcrossing
+# t = 1.
+# t_vec = np.arange(0, t+p.dt, p.dt)
+# sim = ParticleSimulator(z_0, 0., p)
+# sim.simulate(t)
+# xv = np.zeros_like(sim.z)
+# xv[...,1] = sim.z[...,1]
+# xv[...,0] = -xv[...,1] / p.tau_x + sim.z[...,0] / p.C
+# 
+# tind = 50
+# 
+# vmin, vmax = xv[plot_ind,:,0].min(), xv[plot_ind,:,0].max()
+# xmin, xmax = xv[plot_ind,:,1].min(), xv[plot_ind,:,1].max()
+# 
+# v_vec = np.linspace(vmin, vmax, 101)
+# x_vec = np.linspace(xmin, xmax, 101)
+# vv, xx = np.meshgrid(v_vec, x_vec)
+# z_arr = np.stack((vv, xx), axis=-1).reshape((-1, 2))
+# 
+# xv2 = xv[plot_ind]
+# 
+# soln_fn = jax.vmap(ou_soln_xv_integrand, in_axes=(0, None, None, None, None, None, None, None))
+# f = soln_fn(z_arr,
+#             mu_xy[upcrossing_ind],
+#             s_xv[upcrossing_ind],
+#             v_0,
+#             p.threshold,
+#             0.,
+#             t_vec[plot_ind],
+#             p)
+# 
+# vs = np.linspace(-0.05, 0.05, 1001)
+# 
+# xval = 0.005
+# 
+# integrands = integrand_fn(vs,
+#                           xval,
+#                           v_vec, 
+#                           mu_xy[upcrossing_ind_1],
+#                           s_xv[upcrossing_ind_1],
+#                           b[upcrossing_ind_1],
+#                           b_dot[upcrossing_ind_1],
+#                           t_vec[tind],
+#                           p)
+# 
+# z = np.stack((vs, np.zeros_like(vs) + xval), axis=-1)
+# p_xv = soln_fn_xv(z,
+#                   mu_xy[upcrossing_ind_1],
+#                   s_xv[upcrossing_ind_1],
+#                   b[upcrossing_ind_1],
+#                   b_dot[upcrossing_ind_1],
+#                   t_vec[tind],
+#                   p).squeeze()
+# 
+# inds = (xv[tind,:,1] > xval - 0.002) & (xv[tind,:,1] < xval + 0.002)
+# 
+# plt.plot(vs, integrands[400])
+# plt.twinx()
+# plt.hist(xv[tind,inds,0], bins=50, histtype="step", color="C1");
+# plt.show()
+
+## 
+
+index = 50
 
 gs = GridSpec(5, 5)
 fig = plt.figure()
+fig.set_size_inches(sz)
 ax1 = fig.add_subplot(gs[:4,:4])
-ax1.contour(x_vecs[index], v_vecs[index], p_xv[index].reshape((num_vals, num_vals)))
+ax1.scatter(xv[index,:,1], xv[index,:,0], s=1.)
+maxval = p_xv[index].max()
+levels = [i * maxval for i in [0.0001, 0.001, 0.01, 0.1, 0.9]]
+ax1.contour(x_vecs[index], v_vecs[index], p_xv[index].reshape((num_vals, num_vals)), colors="C1", levels=levels)
 
 ax2 = fig.add_subplot(gs[:4, 4])
 ax2.plot(p_v[index], v_vecs[index])
@@ -165,10 +248,23 @@ ax1.set_ylim(v_vecs[index,0], v_vecs[index,-1])
 plt.setp(ax2.get_yticklabels(), visible=False)
 plt.setp(ax1.get_xticklabels(), visible=False)
 
+ax1.set_ylabel("$\dot{x}$")
+ax3.set_xlabel("$x$")
+ax3.set_ylabel("$p(x)$")
+ax2.set_xlabel("$p(\dot{x})$")
+ax1.set_title("$p(\dot{x}, x)$")
+
+fig.savefig("p_xv_after_upcrossing.png")
 plt.show()
 
 ## 
 
+# fig, ax = plt.subplots(3, 3)
+# for i in range(9):
+#     joint = p_xv[index].reshape((num_vals, num_vals))
+# 
+#     ax.flat[i].plot(
+# 
 # soln_fn_xv_args = jax.vmap(ou_soln_xv_after_upcrossing_arguments, in_axes=(0, None, None, None, None, None, None))
 # soln_fn_xv_test = jax.vmap(ou_soln_xv_after_upcrossing, in_axes=(0, None, None, None, None, None, None))
 # quad, q, t2 = soln_fn_xv_args(xv_grids[index], 
@@ -187,11 +283,10 @@ plt.show()
 #                        t_vec[index],
 #                        p)
 # 
-# 
 # t2 = arg * jnp.exp(arg ** 2) * np.pi ** 0.5 * jsp.special.erfc(arg)
-
-## 
-
+# 
+#  
+# 
 # p_v_b = p_v_b / p_b[:,None]
 # 
 # p_v_b = jnp.nan_to_num(p_v_b)
@@ -207,9 +302,9 @@ plt.show()
 # nfunc = jax.vmap(integral_f1_xdot, in_axes=(None, 0, 0))
 # 
 # n1 = nfunc(0, mu, sigma) * p_b
-
-## 
-
+# 
+#  
+# 
 # soln_fn_v_b = jax.vmap(ou_soln_xv_after_upcrossing_arguments, in_axes=(0, None, None, None, None, None, None))
 # soln_fn_v_b = jax.vmap(soln_fn_v_b, in_axes=(None, None, None, None, None, 0, None))
 # 

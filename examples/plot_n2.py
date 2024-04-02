@@ -20,10 +20,10 @@ phi = np.arctan(1080 / 1920)
 sz = (14 * np.cos(phi), 14 * np.sin(phi))
 
 ## ====================
-p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=10000)
+p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=1000)
 
-t = 6.
-t_vec = np.arange(0, t+p.dt, p.dt)
+t = 20.
+t_vec = np.arange(0, t, p.dt)
 
 mu_0 = np.zeros(2, dtype=np.float64)
 s_0 = np.zeros(3, dtype=np.float64)
@@ -34,8 +34,8 @@ s_xy = msim.s
 mu_xv, s_xv = xy_to_xv(mu_xy, s_xy, p)
 
 num_procs = 160000000
-n2sim = np.load("save/plot_n2_N2.npy")
 n1sim = np.load("save/plot_n2_N1.npy")
+n2sim = np.load("save/plot_n2_N2.npy")
 z_0 = np.zeros((p.num_procs, 2), dtype=np.float64)
 sim = ParticleSimulator(z_0, 0., p)
 sim.simulate(t)
@@ -66,8 +66,8 @@ z_arr = np.stack((v_vec, np.zeros_like(v_vec) + p.threshold), axis=1)
 n1 = compute_n1(p.threshold, 0, mu_xv, s_xv)
 
 def compute_mu_sigma(v, p_v):
-    e = jnp.trapz(p_v * v, x=v)
-    s = jnp.trapz(p_v * (v - e) ** 2, x=v)
+    e = jax.scipy.integrate.trapezoid(p_v * v, x=v)
+    s = jax.scipy.integrate.trapezoid(p_v * (v - e) ** 2, x=v)
     return e, s
 
 compute_mu_sigma = jax.vmap(compute_mu_sigma, in_axes=(None, 0))
@@ -81,30 +81,29 @@ for i, t in enumerate(t_vec):
     last_index = len(t_vec) if i == 0 else -i
 
     p_v_b = soln_fn_v_b(z_arr,
-                  mu_xy[i],
+                  mu_xv[i],
                   s_xv[i],
                   p.threshold,
                   0.,
                   t_vec).squeeze()
 
     p_b = soln_fn_x(p.threshold,
-                    mu_xy[i],
+                    mu_xv[i],
                     s_xv[i],
                     p.threshold,
                     0.,
                     t_vec).squeeze()
-    
+
     p_v_b = p_v_b / p_b[:,None]
-    
+
     p_v_b = jnp.nan_to_num(p_v_b)
     p_b = jnp.nan_to_num(p_b)
 
     mu, sigma = compute_mu_sigma(v_vec, p_v_b)
-    
+
     n2 = nfunc(0, mu, sigma) * p_b * n1[i]
 
     n2_arr[i,i:] = n2[:last_index]
-
 
 n2 = n2_arr * num_procs * p.dt ** 2
 vmin, vmax = np.nanmin(n2), np.nanmax(n2)

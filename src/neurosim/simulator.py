@@ -53,7 +53,6 @@ class SimulatorBase(ABC):
 
     @abstractmethod
     def set_up_propagators(self):
-        pass
         eprop, covprop, covconst, uprop = self.compute_propagators(self.p.dt)
         self.expectation_prop = eprop
         self.cov_prop = covprop
@@ -61,7 +60,6 @@ class SimulatorBase(ABC):
         self.u_prop = uprop
 
     def compute_propagators(self, t):
-        pass
         # Expectation propagator
         A = np.array([[-1./self.p.tau_y, 0.],
                       [1./self.p.C, -1./self.p.tau_x]])
@@ -87,10 +85,12 @@ class ParticleSimulator(SimulatorBase):
                  z_0,
                  u_0,
                  params,
+                 stim = None,
                  fix_x_threshold=False):
 
         super().__init__(params)
 
+        self.stim = stim
         self.z_0 = z_0
         self.u_0 = u_0
         self._step = 0
@@ -106,7 +106,7 @@ class ParticleSimulator(SimulatorBase):
         A = np.array([[-1./self.p.tau_y, 0.],
                       [1./self.p.C, -1./self.p.tau_x]])
         expectation_prop = expm(A * self.p.dt)
-        
+
         # Covariance propagator
         B = np.array([[-2./self.p.tau_y,     0.     ,   0.   ],
                       [ 1./self.p.C    ,-1/self.p.tau_tilde,   0.   ],
@@ -120,12 +120,13 @@ class ParticleSimulator(SimulatorBase):
     def simulate(self, t):
         num_steps = int(t / self.p.dt)
         self.num_steps = num_steps
-        
-        self.usim = MembranePotentialSimulator(self.u_0, self.p)
+
+        self.usim = MembranePotentialSimulator(self.u_0, self.p, stim=self.stim)
         self.usim.simulate(t)
 
         self.u = self.usim.u
         self.b = self.usim.b
+        self.b_dot = self.usim.b_dot
 
         self.z = np.zeros((num_steps+1, self.p.num_procs,  2), dtype=np.float64)
         self.z[0] = self.z_0
@@ -139,8 +140,8 @@ class ParticleSimulator(SimulatorBase):
 
             self.propagate()        
 
-            self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i])
-            self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i])
+            self.upcrossings[i] = (self.z[i,:,1] >= self.b[i]) & (self.z[i-1,:,1] < self.b[i-1])
+            self.downcrossings[i] = (self.z[i,:,1] < self.b[i]) & (self.z[i-1,:,1] >= self.b[i-1])
 
             if self.fix_x_threshold:
                 self.z[...,1][i,self.upcrossings[i]] = self.b[i]
@@ -164,16 +165,17 @@ class ParticleSimulator(SimulatorBase):
     def propagate(self):
         i = self._step
         self.z[i] = self.expectation_prop.dot(self.z[i-1].T).T
-        self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
-
-
+        # OLD VERSION, REVERT IF NECESSARY
+        # self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
+        self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt * 2 / self.p.tau_y)
 
 
 class MembranePotentialSimulator(SimulatorBase):
-    def __init__(self, u_0, params):
+    def __init__(self, u_0, params, stim=None):
         super().__init__(params)
         self._step = 0 
         self.u_0 = u_0
+        self.stim = stim
 
     def simulate(self, t):
 
@@ -181,6 +183,7 @@ class MembranePotentialSimulator(SimulatorBase):
 
         self.u = np.zeros(num_steps + 1, dtype=np.float64)
         self.b = np.zeros(num_steps + 1, dtype=np.float64)
+        self.b_dot = np.zeros(num_steps + 1, dtype=np.float64)
         self.u[0] = self.u_0
         self.b[0] = self.p.threshold - self.u_0
         self._step += 1
@@ -191,12 +194,14 @@ class MembranePotentialSimulator(SimulatorBase):
 
     def propagate(self):
         i = self._step
-        self.u[i] = self.u_prop * (self.u[i-1] - self.p.E_L) + self.p.R * self.p.I_e * (1 - self.u_prop)
+        I = self.p.I_e if self.stim is None else self.p.I_e + self.stim[i]
+        self.u[i] = self.u_prop * (self.u[i-1] - self.p.E_L) + self.p.R * I * (1 - self.u_prop)
         self.b[i] = self.p.threshold - self.u[i]
+        self.b_dot[i] = self.u[i] / self.p.tau_x - I / self.p.C
 
-    @property
-    def b_dot(self):
-        return self.u / self.p.tau_x - self.p.I_e / self.p.C
+#     @property
+#     def b_dot(self):
+#         return self.u / self.p.tau_x - self.p.I_e / self.p.C
 
     def set_up_propagators(self):
         self.u_prop = self.compute_propagators(self.p.dt)
@@ -341,7 +346,7 @@ class Simulator():
         A = np.array([[-1./self.p.tau_y, 0.],
                       [1./self.p.C, -1./self.p.tau_x]])
         expectation_prop = expm(A * t)
-        
+
         # Covariance propagator
         B = np.array([[-2./self.p.tau_y,     0.     ,   0.   ],
                       [ 1./self.p.C    ,-1/self.p.tau_tilde,   0.   ],
@@ -350,7 +355,7 @@ class Simulator():
         B_inv = np.linalg.solve(B, np.eye(3))
         cov_prop_const = B_inv.dot(np.eye(3) - cov_prop)\
                 .dot(np.array([[self.p.sigma2_noise,0.,0.]]).T)
-        
+
         # u propagator
         u_prop = np.exp(-t / self.p.tau_x)
         return expectation_prop, cov_prop, cov_prop_const, u_prop
@@ -369,7 +374,7 @@ class Simulator():
         if not u_0:
             u_0 = 0.
 
-       
+
         n1s = []
         mus = []
         ss = []

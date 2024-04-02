@@ -111,5 +111,3 @@ ax[0,0].legend()
 plt.show()
 
 
-
-
