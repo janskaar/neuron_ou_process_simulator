@@ -68,6 +68,11 @@ def compute_cov(p, t):
 ts = np.arange(0, t + p.dt * 0.5, p.dt)
 sigmas = compute_cov(p, ts)
 
+
+########################################
+# Compute approximation from Schwalger paper
+########################################
+
 def schwalger_B(b, b_dot, s, p):
     t1 = (s[2] / p.tau_x ** 2 - 2 * s[1] / p.tau_x + s[0]) * b ** 2
     t2 = 2 * (s[2] / p.tau_x - s[1]) * b * b_dot
@@ -137,6 +142,10 @@ f2_fptd = f2_hazard * np.exp(-cumtrapz(f2_hazard, x=ts, initial=0))
 f1_surv = np.exp(-cumtrapz(f1, x=ts, initial=0))
 f2_surv = np.exp(-cumtrapz(f2_hazard, x=ts, initial=0))
 
+
+########################################
+# Create plot
+########################################
 
 fig, ax = plt.subplots(2, sharex=True)
 
