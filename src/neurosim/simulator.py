@@ -165,9 +165,10 @@ class ParticleSimulator(SimulatorBase):
     def propagate(self):
         i = self._step
         self.z[i] = self.expectation_prop.dot(self.z[i-1].T).T
-        # OLD VERSION, REVERT IF NECESSARY
-        # self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
-        self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt * 2 / self.p.tau_y)
+        # Original version
+        self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt)
+        # Version as defined as in the Schwalger paper. Comment out for now, fix this in parameters instead of in the simulator.
+        # self.z[i,:,0] += np.random.randn(self.p.num_procs) * self.p.sigma_noise * np.sqrt(self.p.dt * 2 / self.p.tau_y)
 
 
 class MembranePotentialSimulator(SimulatorBase):
@@ -247,7 +248,6 @@ class MomentsSimulator(SimulatorBase):
         cov_prop_const = B_inv.dot(np.eye(3) - cov_prop)\
                 .dot(np.array([[self.p.sigma2_noise,0.,0.]]).T)
         
-        # u propagator
         return expectation_prop, cov_prop, cov_prop_const
 
 
