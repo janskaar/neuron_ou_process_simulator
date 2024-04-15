@@ -26,7 +26,17 @@ sz = (14 * np.cos(phi), 14 * np.sin(phi))
 # Run simulations
 ######################
 
-p = SimulationParameters(threshold=10., dt=0.01, I_e = 1., num_procs=100000, sigma_noise=0.5, tau_y = 4., C=1)
+tau_y = 4.
+sigma2_y = 0.5
+sigma2_noise = sigma2_y * 2. / tau_y
+p = SimulationParameters(threshold=10.,
+                         dt=0.01,
+                         I_e=1.,
+                         num_procs=10000,
+                         sigma_noise=np.sqrt(sigma2_noise), #np.sqrt(sigma2_noise),
+                         tau_y=tau_y,
+                         C=1)
+
 D = p.tau_y * p.sigma2_noise / p.C ** 2
 
 t = 20.
@@ -34,19 +44,17 @@ t_vec = np.arange(0, t+p.dt, p.dt)
 
 stim = 0.5 * np.sin(t_vec)
 
-
 # particles
 m0 = np.zeros(2, dtype=np.float64)
-sigma2_y = D / p.tau_y
+#sigma2_y = D / p.tau_y
 S0 = np.zeros((2,2), dtype=np.float64)
-S0[0,0] = p.sigma2_noise
+S0[0,0] = sigma2_y # p.sigma2_noise
 S0[0,1] = 0.
 S0[1,0] = 0.
 S0[1,1] = 0.
 z0 = multivariate_normal.rvs(mean=m0, cov=S0, size=p.num_procs)
 psim = ParticleSimulator(z0, 0., p, stim=stim)
 psim.simulate(t)
-
 
 xy = psim.z.copy()
 xy[...,0] /= p.C
@@ -160,7 +168,9 @@ ax[1].plot(ts, f1_surv, "--", c="C1", label="f1")
 ax[1].plot(ts, f2_surv, "--", c="C0", label="f2")
 ax[1].set_title("survival function")
 ax[1].set_xlabel("time (ms)")
-
+ax[0].set_ylim(0, 0.2)
+ax[1].set_ylim(0, 1)
 fig.tight_layout()
+# fig.savefig("fig1.svg")
 plt.show()
 
