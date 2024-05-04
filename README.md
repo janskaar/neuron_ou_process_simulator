@@ -153,7 +153,7 @@ $$
 $$
 
 #### Probability of upcrossings
-The probability density in time of the x-variable crossing a threshold $b$ with derivative $\dot{b}$ at any given time can be found as the integral
+The probability density in time of the x-variable crossing a threshold $b$ with derivative $\dot{b}$ at any time interval $[t, t+dt)$ can be found as the integral
 
 $$
 \int^{\infty}_{\dot{b}} dt (\dot{x} - \dot{b}) p(x=b, \dot{x}) d\dot{x} \mathrm{,}
@@ -163,4 +163,15 @@ which can be seen as the integral of the joint distribution over $(\dot{x}, x)$ 
 
 ![upcrossing_integral](https://github.com/janskaar/neuron_ou_process_simulator/assets/29370469/1eb7b116-5901-4b0f-a00f-84d8bb79b9e6)
 
-will be continued...
+
+Dividing by $dt$, we get a density in time which can be evaluated as
+
+$$
+\begin{align}
+& p(x=b)\int^\infty_{\dot{b}} (\dot{x} - \dot{b}) p(\dot{x} | x = b) d\dot{x} \\
+&= \frac{1}{\sqrt{2\pi}\sigma_x} \mathrm{exp} \Big( -\frac{1}{2}\frac{(x-\mu_x)^2}{\sigma_x^2} \Big) \int^\infty_{\dot{b}} (\dot{x} - \dot{b})\frac{1}{\sqrt{2\pi}\sigma_{\dot{x}|b}}\mathrm{exp} \bigg( -\frac{1}{2}\frac{(x-\mu_{\dot{x}|b})^2} {\sigma_{\dot{x}|b}^2} \bigg) d\dot{x} \\
+&= \frac{1}{\sqrt{2\pi}\sigma_x} \mathrm{exp} \bigg(-\frac{1}{2}\frac{(x-\mu_x)^2}{\sigma_x^2} \bigg) \bigg \[ \frac{\sigma_{\dot{x}|b}}{\sqrt{2\pi}} \mathrm{exp} \bigg(-\frac{1}{2} \frac{(\dot{b}-\mu_{\dot{x}|b})^2}{\sigma_{\dot{x}|b}^2}\bigg) - \frac{1}{2} (\dot{b} - \mu_{\dot{x}|b}) \mathrm{erfc} \bigg( \frac{\dot{b}-\mu_{\dot{x}|b}}{\sqrt{2}\sigma_{\dot{x}|b}} \bigg) \bigg] \mathrm{,}
+\end{align}
+$$
+
+where $\mu_{\dot{x}|b}$ and $\sigma_{\dot{x}|b}$ are the mean and variance of the distribution $p(\dot{x}|x=b)$. This forms the first-order approximation in (Schwalger, 2021), assuming each upcrossing is independent.
