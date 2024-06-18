@@ -1,3 +1,10 @@
+"""
+Plot pairwise joint upcrossings "analytical" solution against simulations.
+It's not an actual analytical solution, since we assume it to be Gaussian in
+\dot{x}, and we compute the moments numerically, but it shows that if one can
+find a good approximation to these, we have an excellent approximation to f2.
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
