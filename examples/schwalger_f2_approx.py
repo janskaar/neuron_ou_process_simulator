@@ -1,12 +1,11 @@
+"""
+Implement the f_1 and f_2 approximations from (Schwalger, 2021), and
+compare the results to simulations
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-import jax
-import jax.numpy as jnp
-from jax import config
-
-config.update("jax_enable_x64", True)
-from functools import partial
 from scipy.integrate import cumtrapz
 from scipy.stats import multivariate_normal, norm
 from scipy.special import erfc, erf
@@ -202,5 +201,5 @@ ax[1].set_xlabel("time (ms)")
 ax[0].set_ylim(0, 0.2)
 ax[1].set_ylim(0, 1)
 fig.tight_layout()
-# fig.savefig("fig1.svg")
+# fig.savefig("schwalger_approximation.svg")
 plt.show()
