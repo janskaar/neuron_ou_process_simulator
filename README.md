@@ -175,3 +175,7 @@ $$
 $$
 
 where $\mu_{\dot{x}|b}$ and $\sigma_{\dot{x}|b}$ are the mean and variance of the distribution $p(\dot{x}|x=b)$. This forms the first-order approximation in (Schwalger, 2021), assuming each upcrossing is independent.
+
+#### Distribution after first upcrossing
+Taking the distribution for $x, \dot{x}$ at upcrossing described above as the initial condition, we can find the distribution at any time $t$ after the upcrossing analytically.
+![video](https://github.com/janskaar/neuron_ou_process_simulator/assets/29370469/afbb16ab-ca0c-4f26-9311-09b19348ba5d)
