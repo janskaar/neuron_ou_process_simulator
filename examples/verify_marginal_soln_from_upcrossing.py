@@ -1,3 +1,7 @@
+"""
+Check the marginal solutions for post-upcrossing densities against simulations
+"""
+
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
@@ -27,7 +31,7 @@ sim_ind = 300
 
 # simulate expectation / covariance for first upcrossing
 t1_sim = 10.
-p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0.1, num_procs=100000)
+p = SimulationParameters(threshold=0.01, dt=0.01, I_e = 0., num_procs=100000)
 mu_0 = np.zeros(2, dtype=np.float64)
 s_0 = np.zeros(3, dtype=np.float64)
 msim = MomentsSimulator(mu_0, s_0, p)
@@ -83,7 +87,7 @@ for i in range(3):
     xs = np.linspace(xmin, xmax, 10001)
     t_plot = t_plots[i]
     ind_plot = int(t_plot / p.dt)
-    
+
     ou_soln_v = ou_soln_marginal_v_after_upcrossing(vs, mu_xv[sim_ind], s_xv[sim_ind], b[sim_ind], b_dot[sim_ind], t_plot, p)
     ou_soln_x = ou_soln_marginal_x_after_upcrossing(xs, mu_xv[sim_ind], s_xv[sim_ind], b[sim_ind], b_dot[sim_ind], t_plot, p)
 
@@ -109,5 +113,4 @@ ax[1,0].set_ylabel("pdf")
 ax[0,0].legend()
 
 plt.show()
-
 
